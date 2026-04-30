@@ -56,6 +56,7 @@
 
 - **分支命名**：`feat/<功能>` / `fix/<问题>` / `docs/<内容>` / `refactor/<范围>` / `chore/<杂项>`
 - **Commit 格式**：`<type>: <中文简短描述>`，首行不超 72 字符
+- **禁止 Co-Authored-By**：提交信息中**绝对禁止**出现 `Co-Authored-By`、`Co-authored-by` 等联合提交者标签。所有提交的作者应为实际开发者本人，AI 辅助工具不视为共同作者。
 - **PR Checklist**：
   - [ ] 编译通过（`go build ./...` + `npm run build`）
   - [ ] 测试通过（`go test ./...`）
