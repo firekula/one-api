@@ -12,7 +12,7 @@ func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.GzipDecodeMiddleware())
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
-	modelsRouter.Use(middleware.TokenAuth())
+	modelsRouter.Use(middleware.FlexibleTokenAuth())
 	{
 		modelsRouter.GET("", controller.ListModels)
 		modelsRouter.GET("/:model", controller.RetrieveModel)
@@ -70,5 +70,12 @@ func SetRelayRouter(router *gin.Engine) {
 		relayV1Router.POST("/threads/:id/runs/:runsId/cancel", controller.RelayNotImplemented)
 		relayV1Router.GET("/threads/:id/runs/:runsId/steps/:stepId", controller.RelayNotImplemented)
 		relayV1Router.GET("/threads/:id/runs/:runsId/steps", controller.RelayNotImplemented)
+	}
+
+	// Anthropic Messages API 原生中继路由
+	anthropicRouter := router.Group("/v1")
+	anthropicRouter.Use(middleware.RelayPanicRecover(), middleware.AnthropicTokenAuth(), middleware.Distribute())
+	{
+		anthropicRouter.POST("/messages", controller.RelayAnthropic)
 	}
 }

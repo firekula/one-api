@@ -89,8 +89,9 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *Request {
 		claudeRequest.Model = "claude-2.1"
 	}
 	for _, message := range textRequest.Messages {
-		if message.Role == "system" && claudeRequest.System == "" {
-			claudeRequest.System = message.StringContent()
+		if message.Role == "system" && len(claudeRequest.System) == 0 {
+			sysBytes, _ := json.Marshal(message.StringContent())
+			claudeRequest.System = json.RawMessage(sysBytes)
 			continue
 		}
 		claudeMessage := Message{
