@@ -1,5 +1,7 @@
 package anthropic
 
+import "encoding/json"
+
 // https://docs.anthropic.com/claude/reference/messages_post
 
 type Metadata struct {
@@ -44,7 +46,7 @@ type InputSchema struct {
 type Request struct {
 	Model         string    `json:"model"`
 	Messages      []Message `json:"messages"`
-	System        string    `json:"system,omitempty"`
+	System        json.RawMessage `json:"system,omitempty"`
 	MaxTokens     int       `json:"max_tokens,omitempty"`
 	StopSequences []string  `json:"stop_sequences,omitempty"`
 	Stream        bool      `json:"stream,omitempty"`

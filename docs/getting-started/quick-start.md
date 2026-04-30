@@ -126,6 +126,38 @@ chmod u+x one-api
 3. 在镜像地址中填写 `justsong/one-api` 或 `ghcr.io/songquanpeng/one-api`
 4. 配置环境变量和端口后点击部署
 
+## Claude Code 接入
+
+One API 支持原生的 Anthropic Messages API 入站中继，可直接作为 Claude Code 的 API 网关。
+
+### 准备工作
+
+1. 在 One API 管理面板创建 **Anthropic 类型渠道**（类型编号 18），填写上游 API Key 和 Base URL
+2. 创建令牌，并设置允许访问的模型列表（如 `deepseek-v4-pro,claude-sonnet-4-20250514`）
+3. 填写基础 URL 为 `http://<One API地址>:3000/v1/messages`
+
+### 配置方式
+
+**环境变量方式**：
+```bash
+export ANTHROPIC_BASE_URL="http://your-one-api-host:3000"
+export ANTHROPIC_API_KEY="sk-your-one-api-token"
+```
+
+**配置文件方式** (`~/.claude/settings.json`)：
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://your-one-api-host:3000",
+    "ANTHROPIC_API_KEY": "sk-your-one-api-token"
+  }
+}
+```
+
+> **注意**：Anthropic 入站使用 `x-api-key` 头进行认证，与 OpenAI 管道的 `Authorization: Bearer` 不同。`GET /v1/models` 端点同时支持两种认证方式，并根据认证头类型返回 Anthropic 或 OpenAI 格式的模型列表。
+
+---
+
 ## 部署后操作
 
 > ⚠️ **安全提醒**：部署完成后请**立即修改默认密码**。默认管理员账户为 `root`，密码为 `123456`，存在严重安全风险。

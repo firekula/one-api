@@ -42,6 +42,20 @@ type OpenAIModels struct {
 	Parent     *string                 `json:"parent"`
 }
 
+type AnthropicModel struct {
+	Id          string `json:"id"`
+	Type        string `json:"type"`
+	DisplayName string `json:"display_name"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type AnthropicModelList struct {
+	Data    []AnthropicModel `json:"data"`
+	HasMore bool             `json:"has_more"`
+	FirstId string           `json:"first_id"`
+	LastId  string           `json:"last_id"`
+}
+
 var models []OpenAIModels
 var modelsMap map[string]OpenAIModels
 var channelId2Models map[int][]string
@@ -162,6 +176,32 @@ func ListModels(c *gin.Context) {
 			})
 		}
 	}
+
+	authFormat, _ := c.Get("auth_format")
+	if authFormat == "anthropic" {
+		anthropicModels := make([]AnthropicModel, 0, len(availableOpenAIModels))
+		for _, m := range availableOpenAIModels {
+			anthropicModels = append(anthropicModels, AnthropicModel{
+				Id:          m.Id,
+				Type:        "model",
+				DisplayName: m.Id,
+				CreatedAt:   "2024-01-01T00:00:00Z",
+			})
+		}
+		var firstId, lastId string
+		if len(anthropicModels) > 0 {
+			firstId = anthropicModels[0].Id
+			lastId = anthropicModels[len(anthropicModels)-1].Id
+		}
+		c.JSON(200, AnthropicModelList{
+			Data:    anthropicModels,
+			HasMore: false,
+			FirstId: firstId,
+			LastId:  lastId,
+		})
+		return
+	}
+
 	c.JSON(200, gin.H{
 		"object": "list",
 		"data":   availableOpenAIModels,
@@ -171,6 +211,16 @@ func ListModels(c *gin.Context) {
 func RetrieveModel(c *gin.Context) {
 	modelId := c.Param("model")
 	if model, ok := modelsMap[modelId]; ok {
+		authFormat, _ := c.Get("auth_format")
+		if authFormat == "anthropic" {
+			c.JSON(200, AnthropicModel{
+				Id:          model.Id,
+				Type:        "model",
+				DisplayName: model.Id,
+				CreatedAt:   "2024-01-01T00:00:00Z",
+			})
+			return
+		}
 		c.JSON(200, model)
 	} else {
 		Error := relaymodel.Error{

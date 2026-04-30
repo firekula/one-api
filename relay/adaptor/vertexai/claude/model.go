@@ -1,13 +1,17 @@
 package vertexai
 
-import "github.com/songquanpeng/one-api/relay/adaptor/anthropic"
+import (
+	"encoding/json"
+
+	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
+)
 
 type Request struct {
 	// AnthropicVersion must be "vertex-2023-10-16"
 	AnthropicVersion string `json:"anthropic_version"`
 	// Model            string              `json:"model"`
 	Messages      []anthropic.Message `json:"messages"`
-	System        string              `json:"system,omitempty"`
+	System        json.RawMessage     `json:"system,omitempty"`
 	MaxTokens     int                 `json:"max_tokens,omitempty"`
 	StopSequences []string            `json:"stop_sequences,omitempty"`
 	Stream        bool                `json:"stream,omitempty"`

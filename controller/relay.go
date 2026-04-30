@@ -36,6 +36,8 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 		err = controller.RelayAudioHelper(c, relayMode)
 	case relaymode.Proxy:
 		err = controller.RelayProxyHelper(c, relayMode)
+	case relaymode.AnthropicMessages:
+		err = controller.RelayAnthropicHelper(c)
 	default:
 		err = controller.RelayTextHelper(c)
 	}
@@ -152,5 +154,20 @@ func RelayNotFound(c *gin.Context) {
 	}
 	c.JSON(http.StatusNotFound, gin.H{
 		"error": err,
+	})
+}
+
+func RelayAnthropic(c *gin.Context) {
+	relayMode := relaymode.AnthropicMessages
+	bizErr := relayHelper(c, relayMode)
+	if bizErr == nil {
+		return
+	}
+	c.JSON(bizErr.StatusCode, gin.H{
+		"type": "error",
+		"error": gin.H{
+			"type":    bizErr.Error.Code,
+			"message": bizErr.Error.Message,
+		},
 	})
 }
