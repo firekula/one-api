@@ -4,7 +4,18 @@
       "Bash(git commit *)",
       "Bash(git add *)",
       "Bash(git restore *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "PowerShell(podman version *)",
+      "PowerShell(podman machine *)",
+      "PowerShell(podman info *)",
+      "PowerShell(podman system *)",
+      "PowerShell(podman ps *)",
+      "PowerShell(podman build *)",
+      "PowerShell(podman images *)",
+      "PowerShell(podman run -d --name one-api -p 3000:3000 -e TZ=Asia/Shanghai -v \"${PWD}/data:/data\" localhost/one-api:latest 2>&1)",
+      "PowerShell(New-Item *)",
+      "PowerShell(podman *)",
+      "PowerShell(git *)"
     ]
   }
 }

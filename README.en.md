@@ -120,7 +120,7 @@ _✨ Access all LLM through the standard OpenAI API format, easy to deploy & use
 ### Docker Deployment
 
 Deployment command:
-`docker run --name one-api -d --restart always -p 3000:3000 -e TZ=Asia/Shanghai -v /home/ubuntu/data/one-api:/data justsong/one-api`
+`docker run --name one-api -d --restart always -p 3000:3000 -e TZ=Asia/Shanghai -v /home/ubuntu/data/one-api:/data firekula/one-api`
 
 Update command: `docker run --rm -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower -cR`
 
@@ -155,6 +155,71 @@ sudo certbot --nginx
 # Follow the prompts
 # Restart Nginx
 sudo service nginx restart
+```
+
+The initial account username is `root` and password is `123456`.
+
+### Podman Deployment
+
+> Podman is a daemonless container engine that can replace Docker. The following is a standalone Podman deployment method — no Docker installation required.
+
+#### Run with Prebuilt Images
+
+```shell
+# Deploy with SQLite:
+podman run --name one-api -d --restart always -p 3000:3000 -e TZ=Asia/Shanghai -v /home/ubuntu/data/one-api:/data docker.io/firekula/one-api
+# Deploy with MySQL:
+podman run --name one-api -d --restart always -p 3000:3000 -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" -e TZ=Asia/Shanghai -v /home/ubuntu/data/one-api:/data docker.io/firekula/one-api
+```
+
+The first `3000` in `-p 3000:3000` is the host port, which can be modified as needed.
+
+Data and logs will be saved in the `/home/ubuntu/data/one-api` directory on the host. Ensure that the directory exists and has write permissions, or change it to a suitable directory.
+
+> Note: Pulling Docker Hub images via Podman requires the explicit `docker.io/` prefix.
+
+#### Build from Local Dockerfile
+
+```shell
+# Build the image
+podman build -t one-api:latest .
+# Start with SQLite
+podman run -d --name one-api -p 3000:3000 -e TZ=Asia/Shanghai -v ./data:/data localhost/one-api:latest
+```
+
+Locally built images are referenced as `localhost/one-api:latest`.
+
+#### Full Stack with Podman Pod (MySQL + Redis)
+
+Run all services in a single Pod, where containers communicate via `localhost`:
+
+```shell
+# Create a Pod with unified port exposure
+podman pod create --name one-api-pod -p 3000:3000 -p 3306:3306
+
+# Start MySQL
+podman run -d --pod one-api-pod --name mysql --restart always \
+  -v ./data/mysql:/var/lib/mysql \
+  -e TZ=Asia/Shanghai \
+  -e MYSQL_ROOT_PASSWORD='OneAPI@justsong' \
+  -e MYSQL_USER=oneapi \
+  -e MYSQL_PASSWORD='123456' \
+  -e MYSQL_DATABASE=one-api \
+  docker.io/mysql:8.2.0
+
+# Start Redis
+podman run -d --pod one-api-pod --name redis --restart always \
+  docker.io/redis:latest
+
+# Start One API (using locally built image)
+podman run -d --pod one-api-pod --name one-api --restart always \
+  -v ./data/oneapi:/data \
+  -v ./logs:/app/logs \
+  -e SQL_DSN='oneapi:123456@tcp(localhost:3306)/one-api' \
+  -e REDIS_CONN_STRING='redis://localhost:6379' \
+  -e SESSION_SECRET='random_string' \
+  -e TZ=Asia/Shanghai \
+  localhost/one-api:latest --log-dir /app/logs
 ```
 
 The initial account username is `root` and password is `123456`.
