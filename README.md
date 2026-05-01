@@ -339,12 +339,42 @@ OPENAI_API_BASE="https://<HOST>:<PORT>/v1"
 ```mermaid
 graph LR
     A(用户)
-    A --->|使用 One API 分发的 key 进行请求| B(One API)
-    B -->|中继请求| C(OpenAI)
-    B -->|中继请求| D(Azure)
-    B -->|中继请求| E(其他 OpenAI API 格式下游渠道)
-    B -->|中继并修改请求体和返回体| F(非 OpenAI API 格式下游渠道)
+    A --->|OpenAI/Bearer 认证| B(One API)
+    A2(Claude Code) --->|Anthropic/x-api-key 认证| B
+    B -->|OpenAI 格式中继| C(OpenAI)
+    B -->|OpenAI 格式中继| D(Azure)
+    B -->|OpenAI 格式中继| E(其他 OpenAI 兼容渠道)
+    B -->|格式转换| F(非 OpenAI 格式下游渠道)
+    B -->|Anthropic 原生透传| G(Anthropic 兼容端点)
 ```
+
+### Anthropic Messages API / Claude Code 接入
+
+One API 支持原生 [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) 入站中继，可接入 **Claude Code** 等原生 Anthropic 客户端。
+
+**配置方式：**
+
+环境变量：
+```bash
+export ANTHROPIC_BASE_URL="http://<HOST>:<PORT>"
+export ANTHROPIC_API_KEY="sk-<你的令牌>"
+```
+
+或 `~/.claude/settings.json`：
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://<HOST>:<PORT>",
+    "ANTHROPIC_API_KEY": "sk-<你的令牌>"
+  }
+}
+```
+
+> **注意**：渠道需配置为 Anthropic 兼容端点。已测试通过 [DeepSeek Anthropic 端点](https://api.deepseek.com/anthropic) (`deepseek-v4-pro` / `deepseek-v4-flash`)。请求/响应完全透传不做格式转换，支持 `system` 字段的 string 和 array 两种格式，兼容 `tool_result` 的数组 content。
+
+**API 端点：**
+- `POST /v1/messages` — 消息中继（认证方式：`x-api-key` 头）
+- `GET /v1/models` — 模型列表（同时支持 `x-api-key` 和 `Authorization: Bearer`，根据认证头返回 Anthropic 或 OpenAI 格式）
 
 可以通过在令牌后面添加渠道 ID 的方式指定使用哪一个渠道处理本次请求，例如：`Authorization: Bearer ONE_API_KEY-CHANNEL_ID`。
 注意，需要是管理员用户创建的令牌才能指定渠道 ID。
