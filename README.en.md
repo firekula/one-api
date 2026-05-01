@@ -57,33 +57,64 @@ _✨ Access all LLM through the standard OpenAI API format, easy to deploy & use
 ## Features
 1. Support for multiple large models:
    + [x] [OpenAI ChatGPT Series Models](https://platform.openai.com/docs/guides/gpt/chat-completions-api) (Supports [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference))
-   + [x] [Anthropic Claude Series Models](https://anthropic.com)
-   + [x] [Google PaLM2 and Gemini Series Models](https://developers.generativeai.google)
+   + [x] [Anthropic Claude Series Models](https://anthropic.com) (Supports AWS Claude)
+   + [x] [Google PaLM2/Gemini Series Models](https://developers.generativeai.google)
+   + [x] [Mistral Series Models](https://mistral.ai/)
+   + [x] [ByteDance Doubao Series Models](https://www.volcengine.com/experience/ark?utm_term=202502dsinvite&ac=DSASUQY5&rc=2QXCA1VI)
    + [x] [Baidu Wenxin Yiyuan Series Models](https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html)
    + [x] [Alibaba Tongyi Qianwen Series Models](https://help.aliyun.com/document_detail/2400395.html)
+   + [x] [iFLYTEK Spark Cognitive Models](https://www.xfyun.cn/doc/spark/Web.html)
    + [x] [Zhipu ChatGLM Series Models](https://bigmodel.cn)
-2. Supports access to multiple channels through **load balancing**.
-3. Supports **stream mode** that enables typewriter-like effect through stream transmission.
-4. Supports **multi-machine deployment**. [See here](#multi-machine-deployment) for more details.
-5. Supports **token management** that allows setting token expiration time and usage count.
-6. Supports **voucher management** that enables batch generation and export of vouchers. Vouchers can be used for account balance replenishment.
-7. Supports **channel management** that allows bulk creation of channels.
-8. Supports **user grouping** and **channel grouping** for setting different rates for different groups.
-9. Supports channel **model list configuration**.
-10. Supports **quota details checking**.
-11. Supports **user invite rewards**.
-12. Allows display of balance in USD.
-13. Supports announcement publishing, recharge link setting, and initial balance setting for new users.
-14. Offers rich **customization** options:
+   + [x] [360 Zhinao](https://ai.360.cn)
+   + [x] [Tencent Hunyuan Series Models](https://cloud.tencent.com/document/product/1729)
+   + [x] [Moonshot AI](https://platform.moonshot.cn/)
+   + [x] [Baichuan Series Models](https://platform.baichuan-ai.com)
+   + [x] [MINIMAX](https://api.minimax.chat/)
+   + [x] [Groq](https://wow.groq.com/)
+   + [x] [Ollama](https://github.com/ollama/ollama)
+   + [x] [01.AI (LingYiWanWu)](https://platform.lingyiwanwu.com/)
+   + [x] [StepFun](https://platform.stepfun.com/)
+   + [x] [Coze](https://www.coze.com/)
+   + [x] [Cohere](https://cohere.com/)
+   + [x] [DeepSeek](https://www.deepseek.com/)
+   + [x] [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
+   + [x] [DeepL](https://www.deepl.com/)
+   + [x] [together.ai](https://www.together.ai/)
+   + [x] [novita.ai](https://www.novita.ai/)
+   + [x] [SiliconCloud](https://cloud.siliconflow.cn/i/rKXmRobW)
+   + [x] [xAI](https://x.ai/)
+2. Supports configuration of mirrors and numerous [third-party proxy services](https://iamazing.cn/page/openai-api-third-party-services).
+3. Supports access to multiple channels through **load balancing**.
+4. Supports **stream mode** that enables typewriter-like effect through stream transmission.
+5. Supports **multi-machine deployment**. [See here](#multi-machine-deployment) for more details.
+6. Supports **token management** that allows setting token expiration time, quota, allowed IP range, and allowed model access.
+7. Supports **voucher management** that enables batch generation and export of vouchers. Vouchers can be used for account balance replenishment.
+8. Supports **channel management** that allows bulk creation of channels.
+9. Supports **user grouping** and **channel grouping** for setting different multiplier rates for different groups.
+10. Supports channel **model list configuration**.
+11. Supports **quota details checking**.
+12. Supports **user invite rewards**.
+13. Allows display of balance in USD.
+14. Supports **i18n (internationalization)**, backend error messages are translated based on request language.
+15. Supports announcement publishing, recharge link setting, and initial balance setting for new users.
+16. Supports model mapping, which redirects user request models. Do not set unless necessary, as it rebuilds the request body instead of transparently passing it.
+17. Supports automatic retry on failure.
+18. Supports drawing API.
+19. Supports [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/providers/openai/). Simply set the channel proxy to `https://gateway.ai.cloudflare.com/v1/ACCOUNT_TAG/GATEWAY/openai`.
+20. Supports [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) **native inbound relay**. No format conversion needed to connect Claude Code and other native Anthropic clients. Uses `x-api-key` for auth.
+21. Offers rich **customization** options:
     1. Supports customization of system name, logo, and footer.
     2. Supports customization of homepage and about page using HTML & Markdown code, or embedding a standalone webpage through iframe.
-15. Supports management API access through system access tokens.
-16. Supports Cloudflare Turnstile user verification.
-17. Supports user management and multiple user login/registration methods:
-    + Email login/registration and password reset via email.
+22. Supports management API access through system access tokens to expand and customize functionalities.
+23. Supports Cloudflare Turnstile user verification.
+24. Supports user management and multiple user login/registration methods:
+    + Email login/registration (supports email whitelist) and password reset via email.
+    + [Lark / Feishu OAuth](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authorize/get).
     + [GitHub OAuth](https://github.com/settings/applications/new).
+    + [OIDC OAuth](https://openid.net/connect/), which can connect to any identity provider compatible with the OIDC protocol.
     + WeChat Official Account authorization (requires additional deployment of [WeChat Server](https://github.com/songquanpeng/wechat-server)).
-18. Immediate support and encapsulation of other major model APIs as they become available.
+25. Supports theme switching, just set the environment variable `THEME`, default is `default`.
+26. Used together with [Message Pusher](https://github.com/songquanpeng/message-pusher), it can push alarm info to various Apps.
 
 ## Deployment
 ### Docker Deployment
@@ -234,18 +265,47 @@ Note that the token needs to be created by an administrator to specify the chann
 
 If the channel ID is not provided, load balancing will be used to distribute the requests to multiple channels.
 
+### Anthropic Messages API / Claude Code Integration
+
+One API supports native [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) inbound relay, allowing connection to native Anthropic clients like **Claude Code**.
+
+**Configuration Method:**
+
+Environment Variables:
+```bash
+export ANTHROPIC_BASE_URL="http://<HOST>:<PORT>"
+export ANTHROPIC_API_KEY="sk-<your_token>"
+```
+
+Or in `~/.claude/settings.json`:
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://<HOST>:<PORT>",
+    "ANTHROPIC_API_KEY": "sk-<your_token>"
+  }
+}
+```
+
+> **Note**: The channel needs to be configured as an Anthropic-compatible endpoint. Tested with [DeepSeek Anthropic Endpoint](https://api.deepseek.com/anthropic) (`deepseek-v4-pro` / `deepseek-v4-flash`). Requests/responses are transparently relayed without format conversion. Supports `system` field as string and array formats, and is compatible with `tool_result` array `content`.
+
+**API Endpoints:**
+- `POST /v1/messages` — Message relay (Auth: `x-api-key` header)
+- `GET /v1/models` — Model list (Supports both `x-api-key` and `Authorization: Bearer`, returns Anthropic or OpenAI format based on the auth header)
+
 ### Environment Variables
-1. `REDIS_CONN_STRING`: When set, Redis will be used as the storage for request rate limiting instead of memory.
+1. `REDIS_CONN_STRING`: When set, Redis will be used as the cache instead of memory.
     + Example: `REDIS_CONN_STRING=redis://default:redispw@localhost:49153`
+    + If using sentinel or cluster mode, set to a comma-separated list of nodes. Also set `REDIS_PASSWORD` and `REDIS_MASTER_NAME`.
 2. `SESSION_SECRET`: When set, a fixed session key will be used to ensure that cookies of logged-in users are still valid after the system restarts.
     + Example: `SESSION_SECRET=random_string`
-3. `SQL_DSN`: When set, the specified database will be used instead of SQLite. Please use MySQL version 8.0.
+3. `SQL_DSN`: When set, the specified database will be used instead of SQLite. Please use MySQL or PostgreSQL.
     + Example: `SQL_DSN=root:123456@tcp(localhost:3306)/oneapi`
 4. `LOG_SQL_DSN`: When set, a separate database will be used for the `logs` table; please use MySQL or PostgreSQL.
     + Example: `LOG_SQL_DSN=root:123456@tcp(localhost:3306)/oneapi-logs`
-5. `FRONTEND_BASE_URL`: When set, the specified frontend address will be used instead of the backend address.
+5. `FRONTEND_BASE_URL`: When set, the specified frontend address will be used instead of the backend address (for slave nodes).
     + Example: `FRONTEND_BASE_URL=https://openai.justsong.cn`
-6. 'MEMORY_CACHE_ENABLED': Enabling memory caching can cause a certain delay in updating user quotas, with optional values of 'true' and 'false'. If not set, it defaults to 'false'.
+6. `MEMORY_CACHE_ENABLED`: Enabling memory caching can cause a certain delay in updating user quotas, with optional values of `true` and `false`. If not set, it defaults to `false`.
 7. `SYNC_FREQUENCY`: When set, the system will periodically sync configurations from the database, with the unit in seconds. If not set, no sync will happen.
     + Example: `SYNC_FREQUENCY=60`
 8. `NODE_TYPE`: When set, specifies the node type. Valid values are `master` and `slave`. If not set, it defaults to `master`.
@@ -256,30 +316,34 @@ If the channel ID is not provided, load balancing will be used to distribute the
     + Example: `CHANNEL_TEST_FREQUENCY=1440`
 11. `POLLING_INTERVAL`: The time interval (in seconds) between requests when updating channel balances and testing channel availability. Default is no interval.
     + Example: `POLLING_INTERVAL=5`
-12. `BATCH_UPDATE_ENABLED`: Enabling batch database update aggregation can cause a certain delay in updating user quotas. The optional values are 'true' and 'false', but if not set, it defaults to 'false'.
-    +Example: ` BATCH_UPDATE_ENABLED=true`
-    +If you encounter an issue with too many database connections, you can try enabling this option.
-13. `BATCH_UPDATE_INTERVAL=5`: The time interval for batch updating aggregates, measured in seconds, defaults to '5'.
-    +Example: ` BATCH_UPDATE_INTERVAL=5`
+12. `BATCH_UPDATE_ENABLED`: Enabling batch database update aggregation can cause a certain delay in updating user quotas. The optional values are `true` and `false`, but if not set, it defaults to `false`.
+    + Example: `BATCH_UPDATE_ENABLED=true`
+    + If you encounter an issue with too many database connections, you can try enabling this option.
+13. `BATCH_UPDATE_INTERVAL=5`: The time interval for batch updating aggregates, measured in seconds, defaults to `5`.
+    + Example: `BATCH_UPDATE_INTERVAL=5`
 14. Request frequency limit:
-    + `GLOBAL_API_RATE_LIMIT`: Global API rate limit (excluding relay requests), the maximum number of requests within three minutes per IP, default to 180.
-    + `GLOBAL_WEL_RATE_LIMIT`: Global web speed limit, the maximum number of requests within three minutes per IP, default to 60.
+    + `GLOBAL_API_RATE_LIMIT`: Global API rate limit (excluding relay requests), the maximum number of requests within three minutes per IP, default to `180`.
+    + `GLOBAL_WEB_RATE_LIMIT`: Global web speed limit, the maximum number of requests within three minutes per IP, default to `60`.
 15. Encoder cache settings:
-    +`TIKTOKEN_CACHE_DIR`: By default, when the program starts, it will download the encoding of some common word elements online, such as' gpt-3.5 turbo '. In some unstable network environments or offline situations, it may cause startup problems. This directory can be configured to cache data and can be migrated to an offline environment.
-    +`DATA_GYM_CACHE_DIR`: Currently, this configuration has the same function as' TIKTOKEN-CACHE-DIR ', but its priority is not as high as it.
+    + `TIKTOKEN_CACHE_DIR`: By default, when the program starts, it will download the encoding of some common word elements online. Configure this directory to cache data for offline use.
+    + `DATA_GYM_CACHE_DIR`: Same as `TIKTOKEN_CACHE_DIR`, but lower priority.
 16. `RELAY_TIMEOUT`: Relay timeout setting, measured in seconds, with no default timeout time set.
 17. `RELAY_PROXY`: After setting up, use this proxy to request APIs.
 18. `USER_CONTENT_REQUEST_TIMEOUT`: The timeout period for users to upload and download content, measured in seconds.
 19. `USER_CONTENT_REQUEST_PROXY`: After setting up, use this agent to request content uploaded by users, such as images.
-20. `SQLITE_BUSY_TIMEOUT`: SQLite lock wait timeout setting, measured in milliseconds, default to '3000'.
-21. `GEMINI_SAFETY_SETTING`: Gemini's security settings are set to 'BLOCK-NONE' by default.
-22. `GEMINI_VERSION`: The Gemini version used by the One API, which defaults to 'v1'.
-23. `THE`: The system's theme setting, default to 'default', specific optional values refer to [here] (./web/README. md).
-24. `ENABLE_METRIC`: Whether to disable channels based on request success rate, default not enabled, optional values are 'true' and 'false'.
-25. `METRIC_QUEUE_SIZE`: Request success rate statistics queue size, default to '10'.
-26. `METRIC_SUCCESS_RATE_THRESHOLD`: Request success rate threshold, default to '0.8'.
-27. `INITIAL_ROOT_TOKEN`: If this value is set, a root user token with the value of the environment variable will be automatically created when the system starts for the first time.
-28. `INITIAL_ROOT_ACCESS_TOKEN`: If this value is set, a system management token will be automatically created for the root user with a value of the environment variable when the system starts for the first time.
+20. `SQLITE_BUSY_TIMEOUT`: SQLite lock wait timeout setting, measured in milliseconds, default to `3000`.
+21. `SQLITE_PATH`: Custom SQLite database file path, defaults to `one-api.db` in the working directory.
+22. `GEMINI_SAFETY_SETTING`: Gemini's security settings, default to `BLOCK_NONE`.
+23. `GEMINI_VERSION`: The Gemini version used by One API, defaults to `v1`.
+24. `THEME`: The system's theme setting, default to `default`, specific optional values refer to [here](./web/README.md).
+25. `ENABLE_METRIC`: Whether to disable channels based on request success rate, default not enabled, optional values are `true` and `false`.
+26. `METRIC_QUEUE_SIZE`: Request success rate statistics queue size, default to `10`.
+27. `METRIC_SUCCESS_RATE_THRESHOLD`: Request success rate threshold, default to `0.8`.
+28. `INITIAL_ROOT_TOKEN`: If this value is set, a root user token with the value of the environment variable will be automatically created when the system starts for the first time.
+29. `INITIAL_ROOT_ACCESS_TOKEN`: If this value is set, a system management token will be automatically created for the root user with a value of the environment variable when the system starts for the first time.
+30. `ENFORCE_INCLUDE_USAGE`: Whether to force return usage in stream mode, default not enabled, optional values are `true` and `false`.
+31. `TEST_PROMPT`: User prompt when testing model, default to `Output only your specific model name with no additional text.`.
+32. `ONLY_ONE_LOG_FILE`: Whether to use only one log file instead of rotating by date, default is `false`.
 
 ### Command Line Parameters
 1. `--port <port_number>`: Specifies the port number on which the server listens. Defaults to `3000`.
