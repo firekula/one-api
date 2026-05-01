@@ -21,9 +21,9 @@ type Content struct {
 	// tool_calls
 	Id        string `json:"id,omitempty"`
 	Name      string `json:"name,omitempty"`
-	Input     any    `json:"input,omitempty"`
-	Content   string `json:"content,omitempty"`
-	ToolUseId string `json:"tool_use_id,omitempty"`
+	Input     any             `json:"input,omitempty"`
+	Content   json.RawMessage `json:"content,omitempty"`
+	ToolUseId string          `json:"tool_use_id,omitempty"`
 }
 
 type Message struct {

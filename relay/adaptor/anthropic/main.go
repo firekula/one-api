@@ -104,7 +104,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *Request {
 			if message.Role == "tool" {
 				claudeMessage.Role = "user"
 				content.Type = "tool_result"
-				content.Content = content.Text
+				content.Content, _ = json.Marshal(content.Text)
 				content.Text = ""
 				content.ToolUseId = message.ToolCallId
 			}

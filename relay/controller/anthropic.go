@@ -140,6 +140,26 @@ func postConsumeQuotaAnthropic(ctx context.Context, usage *relaymodel.Usage, met
 }
 
 // estimateAnthropicPromptTokens 粗略估算 Anthropic 请求的 prompt tokens
+// estimateContentChars 估算 Content 块中的字符数
+func estimateContentChars(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return len(s)
+	}
+	var arr []json.RawMessage
+	if json.Unmarshal(raw, &arr) == nil {
+		n := 0
+		for _, item := range arr {
+			n += estimateContentChars(item)
+		}
+		return n
+	}
+	return 0
+}
+
 func estimateAnthropicPromptTokens(req *anthropic.Request) int {
 	totalChars := 0
 	if len(req.System) > 0 {
@@ -150,14 +170,14 @@ func estimateAnthropicPromptTokens(req *anthropic.Request) int {
 			var sysBlocks []anthropic.Content
 			if json.Unmarshal(req.System, &sysBlocks) == nil {
 				for _, block := range sysBlocks {
-					totalChars += len(block.Text) + len(block.Content)
+					totalChars += len(block.Text) + estimateContentChars(block.Content)
 				}
 			}
 		}
 	}
 	for _, msg := range req.Messages {
 		for _, content := range msg.Content {
-			totalChars += len(content.Text) + len(content.Content)
+			totalChars += len(content.Text) + estimateContentChars(content.Content)
 		}
 	}
 	if totalChars == 0 {
