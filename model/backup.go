@@ -177,6 +177,11 @@ func ImportData(data *BackupData) (*ImportResult, error) {
 				result.Skipped["redemptions"]++
 				continue
 			}
+			// Redemption.UserId 同样需要经 userIDMap 映射到导入后的新用户 id
+			//（r.UserId 为 0 时映射表无此键，保持 0）
+			if newUserID, ok := userIDMap[r.UserId]; ok {
+				r.UserId = newUserID
+			}
 			r.Id = 0
 			if err := tx.Create(r).Error; err != nil {
 				return err

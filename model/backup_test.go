@@ -57,7 +57,7 @@ func seedTestData(t *testing.T, db *gorm.DB) {
 		t.Fatalf("seed tokens: %v", err)
 	}
 	redemptions := []Redemption{
-		{Key: "red-key-1", Status: 1, Name: "r1", Quota: 1000, CreatedTime: 1},
+		{UserId: users[1].Id, Key: "red-key-1", Status: 1, Name: "r1", Quota: 1000, CreatedTime: 1},
 	}
 	if err := db.Create(&redemptions).Error; err != nil {
 		t.Fatalf("seed redemptions: %v", err)
@@ -170,6 +170,18 @@ func TestImportDataRoundTrip(t *testing.T) {
 	}
 	if config.GitHubClientSecret != "secret-value" {
 		t.Fatalf("GitHubClientSecret 未同步到内存 config: %q", config.GitHubClientSecret)
+	}
+	// Redemption.UserId 也应映射到导入后的新用户 id（seed 中为 alice）
+	var red Redemption
+	if err := DB.Where("`key` = ?", "red-key-1").First(&red).Error; err != nil {
+		t.Fatalf("find imported redemption: %v", err)
+	}
+	var aliceRed User
+	if err := DB.Where("username = ?", "alice").First(&aliceRed).Error; err != nil {
+		t.Fatalf("find alice: %v", err)
+	}
+	if red.UserId != aliceRed.Id {
+		t.Fatalf("redemption.user_id = %d, want alice new id %d", red.UserId, aliceRed.Id)
 	}
 }
 
