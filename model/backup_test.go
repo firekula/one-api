@@ -117,3 +117,118 @@ func TestExportData(t *testing.T) {
 		t.Fatal("user password 哈希未导出")
 	}
 }
+
+func TestImportDataRoundTrip(t *testing.T) {
+	// 库 A：造数据并导出
+	dbA := setupTestDB(t)
+	seedTestData(t, dbA)
+	exported, err := ExportData()
+	if err != nil {
+		t.Fatalf("ExportData: %v", err)
+	}
+
+	// 库 B：全新空库，导入
+	setupTestDB(t) // 替换为第二个临时库
+	result, err := ImportData(exported)
+	if err != nil {
+		t.Fatalf("ImportData: %v", err)
+	}
+	if result.Inserted["users"] != 2 || result.Inserted["tokens"] != 2 ||
+		result.Inserted["channels"] != 1 || result.Inserted["redemptions"] != 1 ||
+		result.Inserted["options"] != 2 {
+		t.Fatalf("inserted 统计不正确: %+v", result.Inserted)
+	}
+	if len(result.Failed) != 0 {
+		t.Fatalf("failed 应为空: %+v", result.Failed)
+	}
+
+	// 校验引用映射：Token.UserId 必须指向导入后的新用户
+	var tk Token
+	if err := DB.Where("`key` = ?", "token-key-1").First(&tk).Error; err != nil {
+		t.Fatalf("find imported token: %v", err)
+	}
+	var u User
+	if err := DB.First(&u, tk.UserId).Error; err != nil {
+		t.Fatalf("imported token 引用的用户不存在: %v", err)
+	}
+	if u.Username != "root" {
+		t.Fatalf("token.user_id 映射错误，指向 %q", u.Username)
+	}
+	// Channel 的 Ability 已重建
+	var abilityCount int64
+	DB.Model(&Ability{}).Where("channel_id = ?", 1).Count(&abilityCount)
+	if abilityCount == 0 {
+		t.Fatal("channel 导入后 Ability 未重建")
+	}
+}
+
+func TestImportDataSkipDuplicates(t *testing.T) {
+	db := setupTestDB(t)
+	seedTestData(t, db)
+	exported, err := ExportData()
+	if err != nil {
+		t.Fatalf("ExportData: %v", err)
+	}
+	// 同一实例上二次导入：全部按唯一键跳过
+	result, err := ImportData(exported)
+	if err != nil {
+		t.Fatalf("ImportData: %v", err)
+	}
+	if result.Inserted["users"] != 0 || result.Inserted["tokens"] != 0 ||
+		result.Inserted["channels"] != 0 || result.Inserted["redemptions"] != 0 ||
+		result.Inserted["options"] != 0 {
+		t.Fatalf("二次导入应全部 skipped: %+v", result.Inserted)
+	}
+	for _, table := range []string{"users", "tokens", "channels", "redemptions", "options"} {
+		if result.Skipped[table] == 0 {
+			t.Fatalf("%s 应有 skipped 记录", table)
+		}
+	}
+}
+
+func TestImportDataIDConflictWithExistingRoot(t *testing.T) {
+	// 目标库已有 root（id=1），导入数据里也有 root（username 相同）
+	db := setupTestDB(t)
+	seedTestData(t, db) // 库 A 数据（含 root, id=1）
+	exported, err := ExportData()
+	if err != nil {
+		t.Fatalf("ExportData: %v", err)
+	}
+
+	// 目标库：也先建 root（模拟真实新部署，id=1 被占用）
+	setupTestDB(t)
+	db2 := DB
+	root := User{Username: "root", Password: "$2a$10$newhash", Role: 100, Status: 1, Quota: 999, AccessToken: "at-new", AffCode: "aff-new"}
+	if err := db2.Create(&root).Error; err != nil {
+		t.Fatalf("create existing root: %v", err)
+	}
+
+	result, err := ImportData(exported)
+	if err != nil {
+		t.Fatalf("ImportData: %v", err)
+	}
+	// 目标库已有的 root 按 username 跳过，alice 插入
+	if result.Skipped["users"] != 1 || result.Inserted["users"] != 1 {
+		t.Fatalf("users 导入统计错误: inserted=%d skipped=%d", result.Inserted["users"], result.Skipped["users"])
+	}
+	// alice 的 token 应正确映射到 alice 的新 id
+	var alice User
+	if err := DB.Where("username = ?", "alice").First(&alice).Error; err != nil {
+		t.Fatalf("find alice: %v", err)
+	}
+	var tk Token
+	if err := DB.Where("`key` = ?", "token-key-2").First(&tk).Error; err != nil {
+		t.Fatalf("find token-key-2: %v", err)
+	}
+	if tk.UserId != alice.Id {
+		t.Fatalf("token-key-2 user_id = %d, want alice id %d", tk.UserId, alice.Id)
+	}
+}
+
+func TestImportDataRejectsBadSchemaVersion(t *testing.T) {
+	setupTestDB(t)
+	data := &BackupData{SchemaVersion: 99}
+	if _, err := ImportData(data); err == nil {
+		t.Fatal("schemaVersion 99 应被拒绝")
+	}
+}
