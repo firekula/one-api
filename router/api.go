@@ -68,6 +68,8 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.PUT("/", controller.UpdateOption)
 		}
+		apiRouter.GET("/data/export", middleware.RootAuth(), controller.GetExportData)
+		apiRouter.POST("/data/import", middleware.RootAuth(), controller.ImportData)
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())
 		{
