@@ -99,11 +99,14 @@ func openMySQL(dsn string) (*gorm.DB, error) {
 	})
 }
 
+func sqliteDSN() string {
+	return fmt.Sprintf("%s?_busy_timeout=%d&_journal_mode=WAL", common.SQLitePath, common.SQLiteBusyTimeout)
+}
+
 func openSQLite() (*gorm.DB, error) {
 	logger.SysLog("SQL_DSN not set, using SQLite as database")
 	common.UsingSQLite = true
-	dsn := fmt.Sprintf("%s?_busy_timeout=%d", common.SQLitePath, common.SQLiteBusyTimeout)
-	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
+	return gorm.Open(sqlite.Open(sqliteDSN()), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 	})
 }
@@ -212,8 +215,19 @@ func setDBConns(db *gorm.DB) *sql.DB {
 	}
 
 	sqlDB.SetMaxIdleConns(env.Int("SQL_MAX_IDLE_CONNS", 100))
-	sqlDB.SetMaxOpenConns(env.Int("SQL_MAX_OPEN_CONNS", 1000))
-	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(env.Int("SQL_MAX_LIFETIME", 60)))
+	if common.UsingSQLite {
+		// SQLite 是单写者数据库：多连接并发只会加剧写锁竞争（database is locked）。
+		// 单连接 + WAL 可消除进程内锁竞争，查询排队而非随机失败。
+		// 注意：若多个进程共享同一 sqlite 文件（多实例部署），跨进程锁竞争仍存在，
+		// 由 DSN 的 _busy_timeout 兜底；生产环境不应让多个实例共享 sqlite。
+		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetMaxOpenConns(1)
+		// 不设置 ConnMaxLifetime：sqlite 连接重建无收益，且会让 gorm PrepareStmt
+		// 缓存周期性失效，导致热路径查询出现毫秒级抖动。
+	} else {
+		sqlDB.SetMaxOpenConns(env.Int("SQL_MAX_OPEN_CONNS", 1000))
+		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(env.Int("SQL_MAX_LIFETIME", 60)))
+	}
 	return sqlDB
 }
 

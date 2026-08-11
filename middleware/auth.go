@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,9 @@ import (
 	"net/http"
 	"strings"
 )
+
+// validateUserToken 可替换变量，便于测试中注入令牌验证结果。
+var validateUserToken = model.ValidateUserToken
 
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
@@ -96,8 +100,14 @@ func TokenAuth() func(c *gin.Context) {
 		key = strings.TrimPrefix(key, "sk-")
 		parts := strings.Split(key, "-")
 		key = parts[0]
-		token, err := model.ValidateUserToken(key)
+		token, err := validateUserToken(key)
 		if err != nil {
+			if errors.Is(err, model.ErrTransientTokenError) {
+				// 服务端瞬态错误（如数据库锁竞争），返回 5xx 让客户端重试，而非误报认证失败。
+				// 具体错误已记录在服务端日志（ValidateUserToken 内的 SysError），不写入响应体。
+				abortWithMessage(c, http.StatusServiceUnavailable, "服务暂不可用，请稍后重试")
+				return
+			}
 			abortWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
@@ -163,8 +173,12 @@ func FlexibleTokenAuth() func(c *gin.Context) {
 		key = strings.TrimPrefix(key, "sk-")
 		parts := strings.Split(key, "-")
 		key = parts[0]
-		token, err := model.ValidateUserToken(key)
+		token, err := validateUserToken(key)
 		if err != nil {
+			if errors.Is(err, model.ErrTransientTokenError) {
+				abortWithMessage(c, http.StatusServiceUnavailable, "服务暂不可用，请稍后重试")
+				return
+			}
 			abortWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
@@ -199,8 +213,12 @@ func AnthropicTokenAuth() func(c *gin.Context) {
 		key = strings.TrimPrefix(key, "sk-")
 		parts := strings.Split(key, "-")
 		key = parts[0]
-		token, err := model.ValidateUserToken(key)
+		token, err := validateUserToken(key)
 		if err != nil {
+			if errors.Is(err, model.ErrTransientTokenError) {
+				abortWithMessage(c, http.StatusServiceUnavailable, "服务暂不可用，请稍后重试")
+				return
+			}
 			abortWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}

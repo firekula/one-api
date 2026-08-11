@@ -20,6 +20,20 @@ const (
 	TokenStatusExhausted = 4
 )
 
+// ErrTransientTokenError 表示令牌验证过程中的服务端瞬态错误（如数据库锁竞争
+// database is locked、连接超时、Redis 抖动）。这类错误不代表凭据无效，
+// 上层应返回可重试的 5xx，而不是 401 认证失败。
+var ErrTransientTokenError = errors.New("transient token validation error")
+
+// classifyTokenCacheError 将缓存查询错误映射为对用户可见的错误：
+// 记录不存在视为凭据无效（401）；其余均为服务端瞬态错误（5xx）。
+func classifyTokenCacheError(err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.New("无效的令牌")
+	}
+	return fmt.Errorf("%w: %s", ErrTransientTokenError, "令牌验证失败")
+}
+
 type Token struct {
 	Id             int     `json:"id"`
 	UserId         int     `json:"user_id"`
@@ -66,10 +80,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	token, err = CacheGetTokenByKey(key)
 	if err != nil {
 		logger.SysError("CacheGetTokenByKey failed: " + err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("无效的令牌")
-		}
-		return nil, errors.New("令牌验证失败")
+		return nil, classifyTokenCacheError(err)
 	}
 	if token.Status == TokenStatusExhausted {
 		return nil, fmt.Errorf("令牌 %s（#%d）额度已用尽", token.Name, token.Id)
