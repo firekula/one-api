@@ -70,6 +70,9 @@ func keyColumn() string {
 // ImportData 合并导入：按业务唯一键判重，已存在则跳过；id 重建并维护
 // 旧 id→新 id 映射还原引用。任一表写入失败则整体回滚。
 func ImportData(data *BackupData) (*ImportResult, error) {
+	if data == nil {
+		return nil, errors.New("备份数据为空")
+	}
 	if data.SchemaVersion != backupSchemaVersion {
 		return nil, errors.New("不支持的备份文件版本")
 	}
@@ -86,7 +89,7 @@ func ImportData(data *BackupData) (*ImportResult, error) {
 		// 1. Channel（含 Ability 重建；AddAbilities 内部用全局 DB，事务内改为直接 tx.Create）
 		for _, ch := range data.Data.Channels {
 			var count int64
-			if err := tx.Model(&Channel{}).Where("type = ? AND `key` = ? AND base_url = ?", ch.Type, ch.Key, ch.BaseURL).Count(&count).Error; err != nil {
+			if err := tx.Model(&Channel{}).Where("type = ? AND "+keyCol+" = ? AND base_url = ?", ch.Type, ch.Key, ch.BaseURL).Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
@@ -153,7 +156,7 @@ func ImportData(data *BackupData) (*ImportResult, error) {
 			}
 			newUserID, ok := userIDMap[tk.UserId]
 			if !ok {
-				result.Failed = append(result.Failed, fmt.Sprintf("token %s: 引用的用户不存在，已跳过", tk.Key))
+				result.Failed = append(result.Failed, fmt.Sprintf("token %q(id=%d): 引用的用户不存在，已跳过", tk.Name, tk.Id))
 				continue
 			}
 			tk.Id = 0
@@ -188,7 +191,7 @@ func ImportData(data *BackupData) (*ImportResult, error) {
 		// 且该写入不参与事务回滚。tx.Create 保持导入的原子性。
 		for _, o := range data.Data.Options {
 			var count int64
-			if err := tx.Model(&Option{}).Where("`key` = ?", o.Key).Count(&count).Error; err != nil {
+			if err := tx.Model(&Option{}).Where(keyCol+" = ?", o.Key).Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
@@ -205,7 +208,8 @@ func ImportData(data *BackupData) (*ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 刷新内存渠道缓存，让新渠道立即生效
+	// 刷新内存渠道缓存与 option 配置（OptionMap/config 变量），让导入立即生效
 	InitChannelCache()
+	InitOptionMap()
 	return result, nil
 }

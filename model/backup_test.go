@@ -7,6 +7,8 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/songquanpeng/one-api/common/config"
 )
 
 // setupTestDB 用临时 sqlite 文件库初始化全局 DB（避免 :memory: 多连接问题），
@@ -159,6 +161,15 @@ func TestImportDataRoundTrip(t *testing.T) {
 	DB.Model(&Ability{}).Where("channel_id = ?", 1).Count(&abilityCount)
 	if abilityCount == 0 {
 		t.Fatal("channel 导入后 Ability 未重建")
+	}
+	// 导入的 option 应同步到内存 config（ImportData 提交后调用 InitOptionMap）
+	// 注：SystemName 默认值同为 "One API"，属弱断言；GitHubClientSecret 默认
+	// 为空串，能真正证明 loadOptionsFromDatabase 已把导入的 option 同步到内存。
+	if config.SystemName != "One API" {
+		t.Fatalf("SystemName 未同步到内存 config: %q", config.SystemName)
+	}
+	if config.GitHubClientSecret != "secret-value" {
+		t.Fatalf("GitHubClientSecret 未同步到内存 config: %q", config.GitHubClientSecret)
 	}
 }
 
