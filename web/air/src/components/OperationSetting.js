@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Divider, Form, Grid, Header } from 'semantic-ui-react';
-import { API, showError, showSuccess, timestamp2string, verifyJSON } from '../helpers';
+import { API, showError, showSuccess, timestamp2string, verifyJSON, downloadTextAsFile } from '../helpers';
 
 const OperationSetting = () => {
   let now = new Date();
@@ -153,6 +153,36 @@ const OperationSetting = () => {
       return;
     }
     showError('日志清理失败：' + message);
+  };
+
+  const exportData = async () => {
+    const res = await API.get('/api/data/export');
+    const { success, message, data } = res.data;
+    if (!success) {
+      showError('导出失败：' + message);
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTextAsFile(JSON.stringify(data, null, 2), `one-api-backup-${date}.json`);
+    showSuccess('数据已导出，请妥善保存备份文件！');
+  };
+
+  const importData = async (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await API.post('/api/data/import', formData);
+    const { success, message, data } = res.data;
+    if (!success) {
+      showError('导入失败：' + message);
+      return;
+    }
+    const fmt = (m) => Object.entries(m || {}).map(([k, v]) => `${k}: ${v}`).join('，');
+    showSuccess(`导入完成！新增 ${fmt(data.inserted)}；跳过 ${fmt(data.skipped)}${data.failed && data.failed.length ? `；失败 ${data.failed.length} 条` : ''}`);
+    e.target.value = '';
   };
 
   return (
@@ -380,6 +410,33 @@ const OperationSetting = () => {
           <Form.Button onClick={() => {
             submitConfig('ratio').then();
           }}>保存倍率设置</Form.Button>
+          <Divider />
+          <Header as='h3'>数据迁移（导出 / 导入全部数据）</Header>
+          <Form.Group inline>
+            <Form.Button
+              onClick={() => {
+                exportData().then();
+              }}
+            >
+              导出数据
+            </Form.Button>
+            <Form.Button
+              content='导入数据'
+              as='label'
+              htmlFor='data-import-file'
+            />
+            <input
+              id='data-import-file'
+              type='file'
+              accept='.json,application/json'
+              hidden
+              onChange={importData}
+            />
+          </Form.Group>
+          <p style={{ color: '#888' }}>
+            导出会生成包含用户、令牌、渠道、兑换码与系统设置的 JSON 备份文件；
+            导入为合并模式，与现有数据冲突（相同用户名 / 令牌 / 兑换码键）时自动跳过，不会覆盖或删除现有数据。
+          </p>
         </Form>
       </Grid.Column>
     </Grid>

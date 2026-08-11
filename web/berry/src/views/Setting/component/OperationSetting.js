@@ -10,7 +10,7 @@ import {
   FormControlLabel,
   TextField,
 } from "@mui/material";
-import { showSuccess, showError, verifyJSON } from "utils/common";
+import { showSuccess, showError, verifyJSON, downloadTextAsFile } from "utils/common";
 import { API } from "utils/api";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -188,6 +188,41 @@ const OperationSetting = () => {
       return;
     }
     showError("日志清理失败：" + message);
+  };
+
+  const exportData = async () => {
+    const res = await API.get("/api/data/export");
+    const { success, message, data } = res.data;
+    if (!success) {
+      showError("导出失败：" + message);
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTextAsFile(JSON.stringify(data, null, 2), `one-api-backup-${date}.json`);
+    showSuccess("数据已导出，请妥善保存备份文件！");
+  };
+
+  const importData = async (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await API.post("/api/data/import", formData);
+    const { success, message, data } = res.data;
+    if (!success) {
+      showError("导入失败：" + message);
+      return;
+    }
+    const fmt = (m) =>
+      Object.entries(m || {})
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("，");
+    showSuccess(
+      `导入完成！新增 ${fmt(data.inserted)}；跳过 ${fmt(data.skipped)}${data.failed && data.failed.length ? `；失败 ${data.failed.length} 条` : ""}`
+    );
+    e.target.value = "";
   };
 
   return (
@@ -547,6 +582,34 @@ const OperationSetting = () => {
           >
             保存倍率设置
           </Button>
+        </Stack>
+      </SubCard>
+      <SubCard title="数据迁移">
+        <Stack justifyContent="flex-start" alignItems="flex-start" spacing={2}>
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                exportData().then();
+              }}
+            >
+              导出数据
+            </Button>
+            <Button variant="contained" component="label" htmlFor="data-import-file">
+              导入数据
+            </Button>
+            <input
+              id="data-import-file"
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={importData}
+            />
+          </Stack>
+          <span style={{ color: "#888" }}>
+            导出会生成包含用户、令牌、渠道、兑换码与系统设置的 JSON 备份文件；
+            导入为合并模式，与现有数据冲突（相同用户名 / 令牌 / 兑换码键）时自动跳过，不会覆盖或删除现有数据。
+          </span>
         </Stack>
       </SubCard>
     </Stack>
