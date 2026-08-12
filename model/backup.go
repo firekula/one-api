@@ -133,6 +133,13 @@ func ImportData(data *BackupData) (*ImportResult, error) {
 			}
 			if count > 0 {
 				result.Skipped["users"]++
+				// 用户已存在（按 username 判重跳过）时，也要建立旧 id → 现有用户 id 的
+				// 映射，否则该用户的 token/redemption 会因"引用的用户不存在"而失败。
+				var existing User
+				if err := tx.Model(&User{}).Where("username = ?", u.Username).First(&existing).Error; err != nil {
+					return err
+				}
+				userIDMap[u.Id] = existing.Id
 				continue
 			}
 			oldID := u.Id

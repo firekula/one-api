@@ -18,6 +18,7 @@ const SystemSetting = () => {
     PasswordRegisterEnabled: '',
     EmailVerificationEnabled: '',
     GitHubOAuthEnabled: '',
+    LarkOAuthEnabled: '',
     GitHubClientId: '',
     GitHubClientSecret: '',
     LarkClientId: '',
@@ -85,6 +86,7 @@ const SystemSetting = () => {
       case 'PasswordRegisterEnabled':
       case 'EmailVerificationEnabled':
       case 'GitHubOAuthEnabled':
+      case 'LarkOAuthEnabled':
       case 'WeChatAuthEnabled':
       case 'TurnstileCheckEnabled':
       case 'EmailDomainRestrictionEnabled':
@@ -352,6 +354,12 @@ const SystemSetting = () => {
               checked={inputs.GitHubOAuthEnabled === 'true'}
               label={t('setting.system.login.github_oauth')}
               name='GitHubOAuthEnabled'
+              onChange={handleInputChange}
+            />
+            <Form.Checkbox
+              checked={inputs.LarkOAuthEnabled === 'true'}
+              label={t('setting.system.login.lark_oauth')}
+              name='LarkOAuthEnabled'
               onChange={handleInputChange}
             />
             <Form.Checkbox

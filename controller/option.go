@@ -61,6 +61,14 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "LarkOAuthEnabled":
+		if option.Value == "true" && config.LarkClientId == "" {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "无法启用飞书登录，请先填入飞书 App ID 以及 App Secret！",
+			})
+			return
+		}
 	case "EmailDomainRestrictionEnabled":
 		if option.Value == "true" && len(config.EmailDomainWhitelist) == 0 {
 			c.JSON(http.StatusOK, gin.H{

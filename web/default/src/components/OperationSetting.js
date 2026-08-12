@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Divider, Form, Grid, Header } from 'semantic-ui-react';
+import { Button, Divider, Form, Grid, Header } from 'semantic-ui-react';
 import {
   API,
   showError,
@@ -209,7 +209,12 @@ const OperationSetting = () => {
       return;
     }
     const fmt = (m) => Object.entries(m || {}).map(([k, v]) => `${k}: ${v}`).join('，');
-    showSuccess(`导入完成！新增 ${fmt(data.inserted)}；跳过 ${fmt(data.skipped)}${data.failed && data.failed.length ? `；失败 ${data.failed.length} 条` : ''}`);
+    if (data.failed && data.failed.length) {
+      const detail = data.failed.slice(0, 5).join('；');
+      showError(`导入完成，但有 ${data.failed.length} 条失败：${detail}${data.failed.length > 5 ? `；…等 ${data.failed.length} 条` : ''}`);
+    } else {
+      showSuccess(`导入完成！新增 ${fmt(data.inserted)}；跳过 ${fmt(data.skipped)}`);
+    }
     e.target.value = '';
   };
 
@@ -478,11 +483,9 @@ const OperationSetting = () => {
             >
               导出数据
             </Form.Button>
-            <Form.Button
-              content='导入数据'
-              as='label'
-              htmlFor='data-import-file'
-            />
+            <Button as='label' htmlFor='data-import-file'>
+              导入数据
+            </Button>
             <input
               id='data-import-file'
               type='file'

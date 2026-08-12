@@ -502,6 +502,7 @@
         "password_register": "Allow Password Registration",
         "email_verification": "Require Email Verification for Password Registration",
         "github_oauth": "Allow GitHub OAuth Login & Registration",
+        "lark_oauth": "Allow Lark OAuth Login & Registration",
         "wechat_login": "Allow WeChat Login & Registration",
         "registration": "Allow New User Registration (When disabled, new users cannot register by any means)",
         "turnstile": "Enable Turnstile User Verification"

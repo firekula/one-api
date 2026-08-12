@@ -246,6 +246,21 @@ func TestImportDataIDConflictWithExistingRoot(t *testing.T) {
 	if tk.UserId != alice.Id {
 		t.Fatalf("token-key-2 user_id = %d, want alice id %d", tk.UserId, alice.Id)
 	}
+	// 目标库已存在的 root（skipped）其 token 也必须映射到现有 root，而不是进入 Failed
+	if len(result.Failed) != 0 {
+		t.Fatalf("failed 应为空: %+v", result.Failed)
+	}
+	var tkRoot Token
+	if err := DB.Where("`key` = ?", "token-key-1").First(&tkRoot).Error; err != nil {
+		t.Fatalf("find token-key-1: %v", err)
+	}
+	var existingRoot User
+	if err := DB.Where("username = ?", "root").First(&existingRoot).Error; err != nil {
+		t.Fatalf("find existing root: %v", err)
+	}
+	if tkRoot.UserId != existingRoot.Id {
+		t.Fatalf("token-key-1 user_id = %d, want existing root id %d", tkRoot.UserId, existingRoot.Id)
+	}
 }
 
 func TestImportDataRejectsBadSchemaVersion(t *testing.T) {

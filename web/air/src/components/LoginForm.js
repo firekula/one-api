@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
 import { API, getLogo, showError, showInfo, showSuccess } from '../helpers';
-import { onGitHubOAuthClicked } from './utils';
+import { onGitHubOAuthClicked, onLarkOAuthClicked } from './utils';
 import Turnstile from 'react-turnstile';
 import { Button, Card, Divider, Form, Icon, Layout, Modal } from '@douyinfe/semi-ui';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
@@ -11,6 +11,7 @@ import TelegramLoginButton from 'react-telegram-login';
 
 import { IconGithubLogo } from '@douyinfe/semi-icons';
 import WeChatIcon from './WeChatIcon';
+import LarkIcon from './LarkIcon';
 
 const LoginForm = () => {
   const [inputs, setInputs] = useState({
@@ -165,7 +166,7 @@ const LoginForm = () => {
                     忘记密码 <Link to="/reset">点击重置</Link>
                   </Text>
                 </div>
-                {status.github_oauth || status.wechat_login || status.telegram_oauth ? (
+                {status.github_oauth || status.wechat_login || status.telegram_oauth || status.lark_oauth_enabled ? (
                   <>
                     <Divider margin="12px" align="center">
                       第三方登录
@@ -186,6 +187,16 @@ const LoginForm = () => {
                           style={{ color: 'rgba(var(--semi-green-5), 1)' }}
                           icon={<Icon svg={<WeChatIcon />} />}
                           onClick={onWeChatLoginClicked}
+                        />
+                      ) : (
+                        <></>
+                      )}
+                      {status.lark_oauth_enabled ? (
+                        <Button
+                          type="primary"
+                          style={{ color: 'rgba(var(--semi-blue-5), 1)' }}
+                          icon={<Icon svg={<LarkIcon />} />}
+                          onClick={() => onLarkOAuthClicked(status.lark_client_id)}
                         />
                       ) : (
                         <></>

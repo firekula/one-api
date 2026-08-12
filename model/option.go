@@ -28,6 +28,7 @@ func InitOptionMap() {
 	config.OptionMap["PasswordRegisterEnabled"] = strconv.FormatBool(config.PasswordRegisterEnabled)
 	config.OptionMap["EmailVerificationEnabled"] = strconv.FormatBool(config.EmailVerificationEnabled)
 	config.OptionMap["GitHubOAuthEnabled"] = strconv.FormatBool(config.GitHubOAuthEnabled)
+	config.OptionMap["LarkOAuthEnabled"] = strconv.FormatBool(config.LarkOAuthEnabled)
 	config.OptionMap["OidcEnabled"] = strconv.FormatBool(config.OidcEnabled)
 	config.OptionMap["WeChatAuthEnabled"] = strconv.FormatBool(config.WeChatAuthEnabled)
 	config.OptionMap["TurnstileCheckEnabled"] = strconv.FormatBool(config.TurnstileCheckEnabled)
@@ -131,6 +132,8 @@ func updateOptionMap(key string, value string) (err error) {
 			config.EmailVerificationEnabled = boolValue
 		case "GitHubOAuthEnabled":
 			config.GitHubOAuthEnabled = boolValue
+		case "LarkOAuthEnabled":
+			config.LarkOAuthEnabled = boolValue
 		case "OidcEnabled":
 			config.OidcEnabled = boolValue
 		case "WeChatAuthEnabled":

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { API, copy, isRoot, showError, showInfo, showSuccess } from '../helpers';
 import Turnstile from 'react-turnstile';
 import { UserContext } from '../context/User';
-import { onGitHubOAuthClicked } from './utils';
+import { onGitHubOAuthClicked, onLarkOAuthClicked } from './utils';
 import {
   Avatar,
   Banner,
@@ -453,6 +453,29 @@ const PersonalSetting = () => {
                     >
                       {
                         status.github_oauth ? '绑定' : '未启用'
+                      }
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <Typography.Text strong>飞书</Typography.Text>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div>
+                    <Input
+                      value={userState.user && userState.user.lark_id !== '' ? userState.user.lark_id : '未绑定'}
+                      readonly={true}
+                    ></Input>
+                  </div>
+                  <div>
+                    <Button
+                      onClick={() => {
+                        onLarkOAuthClicked(status.lark_client_id);
+                      }}
+                      disabled={(userState.user && userState.user.lark_id !== '') || !status.lark_oauth_enabled}
+                    >
+                      {
+                        status.lark_oauth_enabled ? '绑定' : '未启用'
                       }
                     </Button>
                   </div>

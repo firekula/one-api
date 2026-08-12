@@ -96,6 +96,14 @@ func LarkOAuth(c *gin.Context) {
 		LarkBind(c)
 		return
 	}
+
+	if !config.LarkOAuthEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "管理员未开启通过飞书登录以及注册",
+		})
+		return
+	}
 	code := c.Query("code")
 	larkUser, err := getLarkUserInfoByCode(code)
 	if err != nil {

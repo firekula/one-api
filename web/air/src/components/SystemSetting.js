@@ -10,6 +10,9 @@ const SystemSetting = () => {
     GitHubOAuthEnabled: '',
     GitHubClientId: '',
     GitHubClientSecret: '',
+    LarkClientId: '',
+    LarkClientSecret: '',
+    LarkOAuthEnabled: '',
     Notice: '',
     SMTPServer: '',
     SMTPPort: '',
@@ -71,6 +74,7 @@ const SystemSetting = () => {
       case 'EmailVerificationEnabled':
       case 'GitHubOAuthEnabled':
       case 'WeChatAuthEnabled':
+      case 'LarkOAuthEnabled':
       case 'TurnstileCheckEnabled':
       case 'EmailDomainRestrictionEnabled':
       case 'RegisterEnabled':
@@ -109,6 +113,8 @@ const SystemSetting = () => {
       name === 'ServerAddress' ||
       name === 'GitHubClientId' ||
       name === 'GitHubClientSecret' ||
+      name === 'LarkClientId' ||
+      name === 'LarkClientSecret' ||
       name === 'WeChatServerAddress' ||
       name === 'WeChatServerToken' ||
       name === 'WeChatAccountQRCodeImageURL' ||
@@ -209,6 +215,18 @@ const SystemSetting = () => {
       inputs.GitHubClientSecret !== ''
     ) {
       await updateOption('GitHubClientSecret', inputs.GitHubClientSecret);
+    }
+  };
+
+  const submitLarkOAuth = async () => {
+    if (originInputs['LarkClientId'] !== inputs.LarkClientId) {
+      await updateOption('LarkClientId', inputs.LarkClientId);
+    }
+    if (
+      originInputs['LarkClientSecret'] !== inputs.LarkClientSecret &&
+      inputs.LarkClientSecret !== ''
+    ) {
+      await updateOption('LarkClientSecret', inputs.LarkClientSecret);
     }
   };
 
@@ -314,6 +332,12 @@ const SystemSetting = () => {
               checked={inputs.WeChatAuthEnabled === 'true'}
               label='允许通过微信登录 & 注册'
               name='WeChatAuthEnabled'
+              onChange={handleInputChange}
+            />
+            <Form.Checkbox
+              checked={inputs.LarkOAuthEnabled === 'true'}
+              label='允许通过飞书登录 & 注册'
+              name='LarkOAuthEnabled'
               onChange={handleInputChange}
             />
           </Form.Group>
@@ -467,6 +491,43 @@ const SystemSetting = () => {
           </Form.Group>
           <Form.Button onClick={submitGitHubOAuth}>
             保存 GitHub OAuth 设置
+          </Form.Button>
+          <Divider />
+          <Header as='h3'>
+            配置飞书授权登录
+            <Header.Subheader>
+              用以支持通过飞书进行登录注册，
+              <a href='https://open.feishu.cn/app' target='_blank'>
+                点击此处
+              </a>
+              管理你的飞书应用
+            </Header.Subheader>
+          </Header>
+          <Message>
+            Homepage URL 填 <code>{inputs.ServerAddress}</code>
+            ，Redirect URL 填 <code>{`${inputs.ServerAddress}/oauth/lark`}</code>
+          </Message>
+          <Form.Group widths={3}>
+            <Form.Input
+              label='App ID'
+              name='LarkClientId'
+              onChange={handleInputChange}
+              autoComplete='new-password'
+              value={inputs.LarkClientId}
+              placeholder='输入 App ID'
+            />
+            <Form.Input
+              label='App Secret'
+              name='LarkClientSecret'
+              onChange={handleInputChange}
+              type='password'
+              autoComplete='new-password'
+              value={inputs.LarkClientSecret}
+              placeholder='敏感信息不会发送到前端显示'
+            />
+          </Form.Group>
+          <Form.Button onClick={submitLarkOAuth}>
+            保存飞书 OAuth 设置
           </Form.Button>
           <Divider />
           <Header as='h3'>

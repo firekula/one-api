@@ -502,6 +502,7 @@
         "password_register": "允许通过密码进行注册",
         "email_verification": "通过密码注册时需要进行邮箱验证",
         "github_oauth": "允许通过 GitHub 账户登录 & 注册",
+        "lark_oauth": "允许通过飞书登录 & 注册",
         "wechat_login": "允许通过微信登录 & 注册",
         "registration": "允许新用户注册（此项为否时，新用户将无法以任何方式进行注册）",
         "turnstile": "启用 Turnstile 用户校验"
