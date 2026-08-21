@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.1 - 2026-08-21
+
+### 修复
+
+- 飞书登录升级为官方新版 OAuth 2.0 授权码流程：登录页改用 `accounts.feishu.cn/open-apis/authen/v1/authorize`（三个主题统一，补齐 `response_type=code`），换 token 改用 `accounts.feishu.cn/oauth/v3/token`，用户信息改用 `open.feishu.cn/open-apis/authen/v1/user_info`。旧接口（`authen/v1/index`、`authen/v2/oauth/token`、passport 用户信息接口）均已被飞书官方标注为历史版本，继续使用会导致登录报「lark id 为空」。
+- 飞书登录链路增加飞书接口错误码校验，失败时返回飞书返回的真实错误信息，不再误报「lark id 为空」。
+
+### 构建
+
+- Dockerfile 增加 `GOPROXY=https://goproxy.cn,direct`，国内网络环境可正常拉取 Go 依赖。
+- docker-compose.yml 移除对已注释 `db` 服务的 `depends_on` 引用（新版 Compose 会拒绝启动），并挂载 tiktoken 编码缓存目录（`TIKTOKEN_CACHE_DIR`），解决容器启动卡在 tokenizer 下载、端口不监听的问题。
+- web/build.sh 兼容 CRLF 行尾的 THEMES 文件，修复 Windows 下 `cd` 主题目录失败导致构建静默跳过的问题。
+
 ## v1.2.0 - 2026-08-12
 
 ### 新增

@@ -4,6 +4,7 @@ version=$(cat VERSION)
 pwd
 
 while IFS= read -r theme; do
+    theme=$(printf '%s' "$theme" | tr -d '\r')
     echo "Building theme: $theme"
     rm -r build/$theme
     cd "$theme"

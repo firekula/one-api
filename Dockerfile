@@ -21,7 +21,8 @@ RUN apk add --no-cache \
 
 ENV GO111MODULE=on \
     CGO_ENABLED=1 \
-    GOOS=linux
+    GOOS=linux \
+    GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /build
 

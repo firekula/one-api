@@ -19,12 +19,38 @@ import (
 )
 
 type LarkOAuthResponse struct {
-	AccessToken string `json:"access_token"`
+	Code             int    `json:"code"`
+	Msg              string `json:"msg"`
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+	AccessToken      string `json:"access_token"`
+	Data             *struct {
+		AccessToken string `json:"access_token"`
+	} `json:"data"`
 }
 
 type LarkUser struct {
 	Name   string `json:"name"`
 	OpenID string `json:"open_id"`
+}
+
+type LarkUserInfoResponse struct {
+	Code int      `json:"code"`
+	Msg  string   `json:"msg"`
+	Data LarkUser `json:"data"`
+}
+
+func larkErrorDetail(msg, oauthError, errorDescription string) string {
+	if errorDescription != "" {
+		return errorDescription
+	}
+	if oauthError != "" {
+		return oauthError
+	}
+	if msg != "" {
+		return msg
+	}
+	return "未知错误"
 }
 
 func getLarkUserInfoByCode(code string) (*LarkUser, error) {
@@ -42,7 +68,7 @@ func getLarkUserInfoByCode(code string) (*LarkUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", "https://open.feishu.cn/open-apis/authen/v2/oauth/token", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "https://accounts.feishu.cn/oauth/v3/token", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
 	}
@@ -62,22 +88,39 @@ func getLarkUserInfoByCode(code string) (*LarkUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err = http.NewRequest("GET", "https://passport.feishu.cn/suite/passport/oauth/userinfo", nil)
+	if oAuthResponse.Code != 0 || oAuthResponse.Error != "" || oAuthResponse.ErrorDescription != "" {
+		return nil, errors.New("飞书登录失败：" + larkErrorDetail(oAuthResponse.Msg, oAuthResponse.Error, oAuthResponse.ErrorDescription))
+	}
+	accessToken := oAuthResponse.AccessToken
+	if accessToken == "" && oAuthResponse.Data != nil {
+		accessToken = oAuthResponse.Data.AccessToken
+	}
+	if accessToken == "" {
+		return nil, errors.New("飞书登录失败：未获取到 access_token")
+	}
+	req, err = http.NewRequest("GET", "https://open.feishu.cn/open-apis/authen/v1/user_info", nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", oAuthResponse.AccessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 	res2, err := client.Do(req)
 	if err != nil {
 		logger.SysLog(err.Error())
 		return nil, errors.New("无法连接至飞书服务器，请稍后重试！")
 	}
-	var larkUser LarkUser
-	err = json.NewDecoder(res2.Body).Decode(&larkUser)
+	defer res2.Body.Close()
+	var larkUserInfo LarkUserInfoResponse
+	err = json.NewDecoder(res2.Body).Decode(&larkUserInfo)
 	if err != nil {
 		return nil, err
 	}
-	return &larkUser, nil
+	if larkUserInfo.Code != 0 {
+		return nil, errors.New("飞书登录失败：" + larkErrorDetail(larkUserInfo.Msg, "", ""))
+	}
+	if larkUserInfo.Data.OpenID == "" {
+		return nil, errors.New("飞书登录失败：未获取到 open_id")
+	}
+	return &larkUserInfo.Data, nil
 }
 
 func LarkOAuth(c *gin.Context) {

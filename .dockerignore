@@ -1,0 +1,22 @@
+# Version control
+.git/
+.gitignore
+
+# Node
+node_modules/
+web/node_modules/
+web/*/node_modules/
+web/*/build/
+
+# Go build artifacts & local runtime residue
+one-api
+one-api.exe
+test-logs/
+
+# Local tooling / docs
+.reasonix/
+AGENTS.md
+.claude/
+.vscode/
+.idea/
+*.log

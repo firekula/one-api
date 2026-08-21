@@ -95,7 +95,7 @@ export async function onLarkOAuthClicked(lark_client_id) {
     const state = await getOAuthState();
     if (!state) return;
     let redirect_uri = `${window.location.origin}/oauth/lark`;
-    window.open(`https://accounts.feishu.cn/open-apis/authen/v1/authorize?redirect_uri=${redirect_uri}&client_id=${lark_client_id}&state=${state}`);
+    window.open(`https://accounts.feishu.cn/open-apis/authen/v1/authorize?client_id=${lark_client_id}&response_type=code&redirect_uri=${redirect_uri}&state=${state}`);
 }
 
 export async function onOidcClicked(auth_url, client_id, openInNewTab = false) {
