@@ -5,6 +5,7 @@
 ### 构建
 
 - Dockerfile 将 tiktoken 编码文件（`cl100k_base` / `o200k_base`）内嵌进镜像并预设 `TIKTOKEN_CACHE_DIR`，镜像在无外网环境下（如国内服务器）可直接启动；此前容器会卡在 `InitTokenEncoders`，端口不监听导致服务无法访问。
+- Dockerfile builder 阶段自建 `/web/build` 目录，前端构建在容器内自包含，不再依赖宿主机构建产物（`.dockerignore` 排除 `web/build/` 后 `mv` 目标目录缺失会构建失败）。
 - 新增 `.gitattributes` 将 tiktoken 文件标记为 binary，防止 Windows 下换行符转换损坏数据文件。
 - `.dockerignore` 排除 `data/`（本机数据库）与 `web/build/` 聚合产物，减小构建上下文。
 
