@@ -13,6 +13,9 @@ one-api
 one-api.exe
 test-logs/
 
+# Local data (sqlite DB, tiktoken cache, logs) must not enter the build context
+data/
+
 # Local tooling / docs
 .reasonix/
 AGENTS.md

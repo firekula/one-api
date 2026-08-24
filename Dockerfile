@@ -39,6 +39,8 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder2 /build/one-api /
+COPY tiktoken-cache /app/tiktoken
+ENV TIKTOKEN_CACHE_DIR=/app/tiktoken
 
 EXPOSE 3000
 WORKDIR /data

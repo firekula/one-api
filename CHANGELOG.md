@@ -10,6 +10,7 @@
 ### 构建
 
 - Dockerfile 增加 `GOPROXY=https://goproxy.cn,direct`，国内网络环境可正常拉取 Go 依赖。
+- Dockerfile 将 tiktoken 编码文件（`cl100k_base` / `o200k_base`）内嵌进镜像并预设 `TIKTOKEN_CACHE_DIR`，服务端启动不再依赖下载 tokenizer 文件（此前容器会卡在 `InitTokenEncoders`，端口不监听导致服务无法访问）。
 - docker-compose.yml 移除对已注释 `db` 服务的 `depends_on` 引用（新版 Compose 会拒绝启动），并挂载 tiktoken 编码缓存目录（`TIKTOKEN_CACHE_DIR`），解决容器启动卡在 tokenizer 下载、端口不监听的问题。
 - web/build.sh 兼容 CRLF 行尾的 THEMES 文件，修复 Windows 下 `cd` 主题目录失败导致构建静默跳过的问题。
 
