@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.2 - 2026-08-25
+
+### 构建
+
+- Dockerfile 将 tiktoken 编码文件（`cl100k_base` / `o200k_base`）内嵌进镜像并预设 `TIKTOKEN_CACHE_DIR`，镜像在无外网环境下（如国内服务器）可直接启动；此前容器会卡在 `InitTokenEncoders`，端口不监听导致服务无法访问。
+- 新增 `.gitattributes` 将 tiktoken 文件标记为 binary，防止 Windows 下换行符转换损坏数据文件。
+- `.dockerignore` 排除 `data/`（本机数据库）与 `web/build/` 聚合产物，减小构建上下文。
+
 ## v1.2.1 - 2026-08-21
 
 ### 修复
@@ -10,7 +18,6 @@
 ### 构建
 
 - Dockerfile 增加 `GOPROXY=https://goproxy.cn,direct`，国内网络环境可正常拉取 Go 依赖。
-- Dockerfile 将 tiktoken 编码文件（`cl100k_base` / `o200k_base`）内嵌进镜像并预设 `TIKTOKEN_CACHE_DIR`，服务端启动不再依赖下载 tokenizer 文件（此前容器会卡在 `InitTokenEncoders`，端口不监听导致服务无法访问）。
 - docker-compose.yml 移除对已注释 `db` 服务的 `depends_on` 引用（新版 Compose 会拒绝启动），并挂载 tiktoken 编码缓存目录（`TIKTOKEN_CACHE_DIR`），解决容器启动卡在 tokenizer 下载、端口不监听的问题。
 - web/build.sh 兼容 CRLF 行尾的 THEMES 文件，修复 Windows 下 `cd` 主题目录失败导致构建静默跳过的问题。
 
