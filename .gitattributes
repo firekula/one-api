@@ -1,0 +1,2 @@
+# tiktoken 编码文件是 LF 分隔的数据文件，禁止换行符转换，否则解析损坏
+tiktoken-cache/* binary
