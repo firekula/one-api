@@ -4,7 +4,8 @@ WORKDIR /web
 COPY ./VERSION .
 COPY ./web .
 
-RUN cd /web/default && npm install --legacy-peer-deps && \
+RUN mkdir -p /web/build && \
+    cd /web/default && npm install --legacy-peer-deps && \
     DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(cat /web/VERSION) npm run build && \
     cd /web/berry && npm install --legacy-peer-deps && \
     DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(cat /web/VERSION) npm run build && \
