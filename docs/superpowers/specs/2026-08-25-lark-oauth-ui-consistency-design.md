@@ -70,7 +70,7 @@ status.lark_oauth_enabled === true
 并且 status.lark_client_id 非空
 ```
 
-首页“系统配置”卡片增加飞书 OAuth 状态行。文案通过现有 i18n 体系提供中文、英文和日文翻译。
+首页“系统配置”卡片增加飞书 OAuth 状态行。文案通过现有 i18n 体系提供中文和英文翻译。
 
 ### air 主题
 
@@ -181,7 +181,6 @@ http://192.168.0.86:3000 不一致。请通过系统服务器地址访问，
 - `web/default/src/pages/Home/index.js`
 - `web/default/src/locales/zh/translation.json`
 - `web/default/src/locales/en/translation.json`
-- `web/default/src/locales/ja/translation.json`
 - 其他调用 `onLarkOAuthClicked` 的 default 组件（按调用点同步函数参数）
 
 ### air
@@ -232,7 +231,7 @@ http://192.168.0.86:3000 不一致。请通过系统服务器地址访问，
 ### 页面验收
 
 - default 与 air 首页显示飞书 OAuth 的已启用/未启用状态。
-- default 的中、英、日文案均能正确渲染。
+- default 的中文和英文文案均能正确渲染。
 - 从飞书登录回调后，已有账户可以登录，新账户在允许注册时可以创建。
 - 已登录用户的飞书绑定流程仍可使用。
 - 错误提示中不泄露敏感信息。
