@@ -222,30 +222,80 @@ type LogStatistic struct {
 	CompletionTokens int    `gorm:"column:completion_tokens"`
 }
 
-func SearchLogsByDayAndModel(userId, start, end int) (LogStatistics []*LogStatistic, err error) {
-	groupSelect := "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
+const (
+	LogGranularityDay  = "day"
+	LogGranularityHour = "hour"
+)
 
-	if common.UsingPostgreSQL {
-		groupSelect = "TO_CHAR(date_trunc('day', to_timestamp(created_at)), 'YYYY-MM-DD') as day"
+// LogStatisticQuery 描述一次日志聚合查询。UserId 为 0 表示不限用户（调用方必须先完成权限校验）。
+type LogStatisticQuery struct {
+	UserId         int
+	Username       string
+	TokenName      string
+	ModelName      string
+	StartTimestamp int64
+	EndTimestamp   int64
+	Granularity    string
+}
+
+// logBucketSelect 返回按服务器本地时间分桶的 SQL 表达式。
+// 三个方言都按本地时间分桶：MySQL 的 FROM_UNIXTIME 走会话时区，PostgreSQL 的
+// date_trunc 走会话 TimeZone，SQLite 默认是 UTC，必须显式加 'localtime' 修饰符，
+// 否则同一份数据在 sqlite 与 mysql 下会落到不同桶里。
+func logBucketSelect(granularity string) string {
+	hour := granularity == LogGranularityHour
+	switch {
+	case common.UsingPostgreSQL:
+		if hour {
+			return "TO_CHAR(date_trunc('hour', to_timestamp(created_at)), 'YYYY-MM-DD HH24:00')"
+		}
+		return "TO_CHAR(date_trunc('day', to_timestamp(created_at)), 'YYYY-MM-DD')"
+	case common.UsingSQLite:
+		if hour {
+			return "strftime('%Y-%m-%d %H:00', datetime(created_at, 'unixepoch', 'localtime'))"
+		}
+		return "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch', 'localtime'))"
+	default:
+		if hour {
+			return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d %H:00')"
+		}
+		return "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d')"
 	}
+}
 
-	if common.UsingSQLite {
-		groupSelect = "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as day"
-	}
-
-	err = LOG_DB.Raw(`
-		SELECT `+groupSelect+`,
+// SearchLogsByDayAndModel 按桶（天或小时）× 模型聚合消费日志。
+// 桶标签仍放在 LogStatistic.Day 字段里，前端不必区分粒度。
+func SearchLogsByDayAndModel(query LogStatisticQuery) (LogStatistics []*LogStatistic, err error) {
+	sql := `
+		SELECT ` + logBucketSelect(query.Granularity) + ` AS day,
 		model_name, count(1) as request_count,
 		sum(quota) as quota,
 		sum(prompt_tokens) as prompt_tokens,
 		sum(completion_tokens) as completion_tokens
 		FROM logs
-		WHERE type=2
-		AND user_id= ?
-		AND created_at BETWEEN ? AND ?
+		WHERE type = ?`
+	args := []interface{}{LogTypeConsume}
+	if query.UserId != 0 {
+		sql += ` AND user_id = ?`
+		args = append(args, query.UserId)
+	}
+	if query.Username != "" {
+		sql += ` AND username = ?`
+		args = append(args, query.Username)
+	}
+	if query.TokenName != "" {
+		sql += ` AND token_name = ?`
+		args = append(args, query.TokenName)
+	}
+	if query.ModelName != "" {
+		sql += ` AND model_name = ?`
+		args = append(args, query.ModelName)
+	}
+	sql += ` AND created_at BETWEEN ? AND ?
 		GROUP BY day, model_name
-		ORDER BY day, model_name
-	`, userId, start, end).Scan(&LogStatistics).Error
+		ORDER BY day, model_name`
+	args = append(args, query.StartTimestamp, query.EndTimestamp)
 
+	err = LOG_DB.Raw(sql, args...).Scan(&LogStatistics).Error
 	return LogStatistics, err
 }

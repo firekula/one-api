@@ -259,13 +259,81 @@ func GetUser(c *gin.Context) {
 	return
 }
 
-func GetUserDashboard(c *gin.Context) {
-	id := c.GetInt(ctxkey.Id)
-	now := time.Now()
-	startOfDay := now.Truncate(24*time.Hour).AddDate(0, 0, -6).Unix()
-	endOfDay := now.Truncate(24 * time.Hour).Add(24*time.Hour - time.Second).Unix()
+const (
+	dashboardDefaultDays = 7
+	dashboardMaxDays     = 366
+	dashboardMaxHourDays = 90
+)
 
-	dashboards, err := model.SearchLogsByDayAndModel(id, int(startOfDay), int(endOfDay))
+func GetUserDashboard(c *gin.Context) {
+	now := time.Now()
+	// 默认区间用本地时区的"今天"边界，与 SQL 的本地时区分桶保持一致
+	defaultEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, time.Local).Unix()
+	defaultStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).
+		AddDate(0, 0, -(dashboardDefaultDays - 1)).Unix()
+
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if startTimestamp <= 0 {
+		startTimestamp = defaultStart
+	}
+	if endTimestamp <= 0 {
+		endTimestamp = defaultEnd
+	}
+	if startTimestamp > endTimestamp {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "无效的时间范围",
+			"data":    nil,
+		})
+		return
+	}
+
+	granularity := c.DefaultQuery("granularity", model.LogGranularityDay)
+	if granularity != model.LogGranularityDay && granularity != model.LogGranularityHour {
+		granularity = model.LogGranularityDay
+	}
+	maxDays := int64(dashboardMaxDays)
+	if granularity == model.LogGranularityHour {
+		maxDays = dashboardMaxHourDays
+	}
+	if endTimestamp-startTimestamp > maxDays*86400 {
+		message := "天粒度最多查询 366 天"
+		if granularity == model.LogGranularityHour {
+			message = "小时粒度最多查询 90 天"
+		}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": message,
+			"data":    nil,
+		})
+		return
+	}
+
+	query := model.LogStatisticQuery{
+		UserId:         c.GetInt(ctxkey.Id),
+		TokenName:      c.Query("token_name"),
+		ModelName:      c.Query("model_name"),
+		StartTimestamp: startTimestamp,
+		EndTimestamp:   endTimestamp,
+		Granularity:    granularity,
+	}
+
+	// 只有管理员能请求全站视图；非管理员传了 username 也会被忽略（只能看自己）
+	if c.DefaultQuery("scope", "self") == "all" {
+		if c.GetInt(ctxkey.Role) < model.RoleAdminUser {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "无权查看全站统计",
+				"data":    nil,
+			})
+			return
+		}
+		query.UserId = 0
+		query.Username = c.Query("username")
+	}
+
+	dashboards, err := model.SearchLogsByDayAndModel(query)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -279,7 +347,6 @@ func GetUserDashboard(c *gin.Context) {
 		"message": "",
 		"data":    dashboards,
 	})
-	return
 }
 
 func GenerateAccessToken(c *gin.Context) {
