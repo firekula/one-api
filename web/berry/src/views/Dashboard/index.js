@@ -28,6 +28,14 @@ const initFilters = () => ({
 const sanitizeCandidates = (list) =>
   Array.isArray(list) ? [...new Set(list.filter((value) => typeof value === 'string' && value.trim() !== ''))] : [];
 
+// 候选值只覆盖所选区间（换用户后令牌/模型还会再收窄），已选中的值可能不在新列表里。
+// MUI 的 Select 遇到不在选项中的值会渲染成空白，但筛选依然生效——用户看到空的下拉框、
+// 空图表，却看不出请求里还带着 model_name。把选中值补成额外选项，保证显示与提交一致。
+const withSelected = (list, selected) => {
+  const items = Array.isArray(list) ? list : [];
+  return selected && !items.includes(selected) ? [selected, ...items] : items;
+};
+
 const toUnixSeconds = (date) => Math.floor(dayjs(date).valueOf() / 1000);
 
 const Dashboard = () => {
@@ -67,16 +75,18 @@ const Dashboard = () => {
       const res = await API.get('/api/user/dashboard', { params: buildParams() });
       const { success, message, data } = res.data;
       if (success) {
-        if (data) {
-          // 折线图与柱状图共用同一份桶集合
-          const dates = getDateRange(filters.start, filters.end, filters.granularity);
-          const lineData = getLineDataGroup(data, dates);
-          // 卡片数值按今天的桶统计，需要知道当前粒度（day 一个桶 / hour 当天所有小时桶）
-          setRequestChart(getLineCardOption(lineData, 'RequestCount', filters.granularity));
-          setQuotaChart(getLineCardOption(lineData, 'Quota', filters.granularity));
-          setTokenChart(getLineCardOption(lineData, 'PromptTokens', filters.granularity));
-          setStatisticalData(getBarDataGroup(data, dates));
-        }
+        // 空区间时后端（老版本会把 Go 的 nil 切片序列化成 null）可能给出 null/undefined。
+        // 这里按空数组处理：数据为空就渲染 0 与「-」，绝不能让三张「今日 X」卡片
+        // 停留在上一个区间的数字上——那是把旧数当今日数展示。
+        const rows = Array.isArray(data) ? data : [];
+        // 折线图与柱状图共用同一份桶集合
+        const dates = getDateRange(filters.start, filters.end, filters.granularity);
+        const lineData = getLineDataGroup(rows, dates);
+        // 卡片数值按今天的桶统计，需要知道当前粒度（day 一个桶 / hour 当天所有小时桶）
+        setRequestChart(getLineCardOption(lineData, 'RequestCount', filters.granularity));
+        setQuotaChart(getLineCardOption(lineData, 'Quota', filters.granularity));
+        setTokenChart(getLineCardOption(lineData, 'PromptTokens', filters.granularity));
+        setStatisticalData(getBarDataGroup(rows, dates));
       } else {
         showError(message);
       }
@@ -199,7 +209,7 @@ const Dashboard = () => {
                 <Select
                   label="数据范围"
                   value={filters.scope}
-                  onChange={(e) => setFilters({ ...filters, scope: e.target.value, username: '', token_name: '' })}
+                  onChange={(e) => setFilters({ ...filters, scope: e.target.value, username: '', token_name: '', model_name: '' })}
                 >
                   <MenuItem value="self">仅自己</MenuItem>
                   <MenuItem value="all">全站</MenuItem>
@@ -214,11 +224,11 @@ const Dashboard = () => {
                 <Select
                   label="用户"
                   value={filters.username}
-                  onChange={(e) => setFilters({ ...filters, username: e.target.value, token_name: '' })}
+                  onChange={(e) => setFilters({ ...filters, username: e.target.value, token_name: '', model_name: '' })}
                   MenuProps={{ PaperProps: { style: { maxHeight: 200 } } }}
                 >
                   <MenuItem value="">全部</MenuItem>
-                  {candidates.users.map((name) => (
+                  {withSelected(candidates.users, filters.username).map((name) => (
                     <MenuItem key={name} value={name}>
                       {name}
                     </MenuItem>
@@ -237,7 +247,7 @@ const Dashboard = () => {
                 MenuProps={{ PaperProps: { style: { maxHeight: 200 } } }}
               >
                 <MenuItem value="">全部</MenuItem>
-                {candidates.tokens.map((name) => (
+                {withSelected(candidates.tokens, filters.token_name).map((name) => (
                   <MenuItem key={name} value={name}>
                     {name}
                   </MenuItem>
@@ -255,7 +265,7 @@ const Dashboard = () => {
                 MenuProps={{ PaperProps: { style: { maxHeight: 200 } } }}
               >
                 <MenuItem value="">全部</MenuItem>
-                {candidates.models.map((name) => (
+                {withSelected(candidates.models, filters.model_name).map((name) => (
                   <MenuItem key={name} value={name}>
                     {name}
                   </MenuItem>

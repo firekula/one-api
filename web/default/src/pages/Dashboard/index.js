@@ -67,6 +67,13 @@ const sanitizeCandidates = (list) =>
     ? [...new Set(list.filter((v) => typeof v === 'string' && v.trim() !== ''))]
     : [];
 
+// 候选值只覆盖所选区间（换用户后令牌/模型还会再收窄），已选中的值可能不在新列表里。
+// semantic-ui 的 Dropdown 遇到不在选项中的值会渲染成空白，而筛选依旧生效——用户看到
+// 空的下拉框、空图表，却无从得知请求里还带着 model_name。把选中值补进列表首位，
+// 让「显示出来的选择」和「实际提交的筛选」始终一致。
+const withSelected = (list, selected) =>
+  selected && !list.includes(selected) ? [selected, ...list] : list;
+
 // 生成以本地自然日为边界的区间（起始日 00:00:00 ~ 结束日 23:59:59），
 // 与后端 GetUserDashboard 的默认区间口径一致：整日对齐，首个桶不会是半天。
 const buildDayRange = (daysAgo) => {
@@ -447,6 +454,7 @@ const Dashboard = () => {
                       scope: value,
                       username: '',
                       token_name: '',
+                      model_name: '',
                     })
                   }
                 />
@@ -456,15 +464,22 @@ const Dashboard = () => {
                   label={t('dashboard.filters.username')}
                   options={[
                     { key: '', text: t('dashboard.filters.all'), value: '' },
-                    ...candidates.users.map((name) => ({
-                      key: name,
-                      text: name,
-                      value: name,
-                    })),
+                    ...withSelected(candidates.users, filters.username).map(
+                      (name) => ({
+                        key: name,
+                        text: name,
+                        value: name,
+                      })
+                    ),
                   ]}
                   value={filters.username}
                   onChange={(e, { value }) =>
-                    setFilters({ ...filters, username: value, token_name: '' })
+                    setFilters({
+                      ...filters,
+                      username: value,
+                      token_name: '',
+                      model_name: '',
+                    })
                   }
                 />
               )}
@@ -472,11 +487,13 @@ const Dashboard = () => {
                 label={t('dashboard.filters.token_name')}
                 options={[
                   { key: '', text: t('dashboard.filters.all'), value: '' },
-                  ...candidates.tokens.map((name) => ({
-                    key: name,
-                    text: name,
-                    value: name,
-                  })),
+                  ...withSelected(candidates.tokens, filters.token_name).map(
+                    (name) => ({
+                      key: name,
+                      text: name,
+                      value: name,
+                    })
+                  ),
                 ]}
                 value={filters.token_name}
                 onChange={(e, { value }) =>
@@ -487,11 +504,13 @@ const Dashboard = () => {
                 label={t('dashboard.filters.model_name')}
                 options={[
                   { key: '', text: t('dashboard.filters.all'), value: '' },
-                  ...candidates.models.map((name) => ({
-                    key: name,
-                    text: name,
-                    value: name,
-                  })),
+                  ...withSelected(candidates.models, filters.model_name).map(
+                    (name) => ({
+                      key: name,
+                      text: name,
+                      value: name,
+                    })
+                  ),
                 ]}
                 value={filters.model_name}
                 onChange={(e, { value }) =>

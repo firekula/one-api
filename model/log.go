@@ -266,6 +266,10 @@ func logBucketSelect(granularity string) string {
 // SearchLogsByDayAndModel 按桶（天或小时）× 模型聚合消费日志。
 // 桶标签仍放在 LogStatistic.Day 字段里，前端不必区分粒度。
 func SearchLogsByDayAndModel(query LogStatisticQuery) (LogStatistics []*LogStatistic, err error) {
+	// 先初始化成空切片：Go 的 nil 切片会被序列化成 JSON 的 null，而响应契约里的
+	// data 是数组。前端拿到 null 时（berry 的 `if (data)` 守卫）会整段跳过状态更新，
+	// 卡片就留着上一个区间的数字配「今日」标题。空区间返回 [] 让每个消费者都拿到数组。
+	LogStatistics = make([]*LogStatistic, 0)
 	sql := `
 		SELECT ` + logBucketSelect(query.Granularity) + ` AS day,
 		model_name, count(1) as request_count,

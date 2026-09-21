@@ -272,6 +272,9 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [hasData, setHasData] = useState(false);
+    // 请求失败与「区间内确实没有数据」是两回事：失败时图表保留上一次的结果，
+    // 但必须给出失败提示，不能拿「所选区间内暂无数据」去解释一次没成功的请求。
+    const [loadError, setLoadError] = useState(false);
     const lineChartRef = useRef(null);
     const pieChartRef = useRef(null);
 
@@ -365,16 +368,21 @@ const Dashboard = () => {
             model_name: filters.model_name
         };
         setLoading(true);
+        // 每次请求都先清掉上一次的失败标记，成功取到数后不会再挂着失败提示
+        setLoadError(false);
         try {
             const res = await API.get('/api/user/dashboard', {params});
             const {success, message, data} = res.data;
             if (!success) {
+                setLoadError(true);
                 showError(message);
                 return;
             }
             applyData(Array.isArray(data) ? data : []);
         } catch (error) {
-            // axios 拦截器已经提示过了，这里保留上一次的图表数据
+            // axios 拦截器已经提示过了（3 秒自动消失），这里再置一个持久标记，
+            // 让页面自己说明是「加载失败」而不是「区间内没有数据」；图表保留上一次结果
+            setLoadError(true);
         } finally {
             setLoaded(true);
             setLoading(false);
@@ -521,7 +529,19 @@ const Dashboard = () => {
                                 onClick={loadDashboardData} loading={loading}>查询</Button>
                     </div>
                     {
-                        !loading && loaded && !hasData &&
+                        !loading && loaded && loadError &&
+                        <div style={{
+                            textAlign: 'center',
+                            color: 'var(--semi-color-danger)',
+                            marginBottom: 10
+                        }}>数据加载失败，图表可能不是当前筛选条件的结果
+                            <Button theme='borderless' type='danger' size='small'
+                                    className="btn-margin-right"
+                                    onClick={loadDashboardData}>重试</Button>
+                        </div>
+                    }
+                    {
+                        !loading && loaded && !loadError && !hasData &&
                         <div style={{
                             textAlign: 'center',
                             color: 'var(--semi-color-text-2)',
