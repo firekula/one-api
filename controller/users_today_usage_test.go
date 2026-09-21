@@ -118,6 +118,58 @@ func TestGetAllUsersEffectiveLimitFollowsGlobalDefault(t *testing.T) {
 	}
 }
 
+// TestSearchUsersReturnsTodayUsage 锁定搜索路径与分页列表返回同一形状。
+// 搜索结果只有裸 model.User 时，四个附加字段缺失，三个主题的用户表都会把搜索行
+// 渲染成「0 / 不限」——一个"既没有用量、也没有上限"的错误正面断言
+// （浏览器实测：同一用户分页行 960 / 不限，搜索行 0 / 不限）。
+func TestSearchUsersReturnsTodayUsage(t *testing.T) {
+	setupControllerTestDB(t)
+	u := &model.User{Username: "bob", Password: "hash", Role: model.RoleCommonUser, Status: 1, Quota: 100, AccessToken: "at-bob", AffCode: "aff-bob"}
+	if err := model.DB.Create(u).Error; err != nil {
+		t.Fatalf("创建用户失败: %v", err)
+	}
+	if err := model.DB.Model(&model.User{}).Where("id = ?", u.Id).Update("daily_token_limit", int64(5000)).Error; err != nil {
+		t.Fatalf("设置上限失败: %v", err)
+	}
+	if err := model.RecordDailyUsage(u.Id, 120, 30, 45); err != nil {
+		t.Fatalf("记账失败: %v", err)
+	}
+
+	r := gin.New()
+	r.GET("/api/user/search", SearchUsers)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/user/search?keyword=bob", nil)
+	r.ServeHTTP(w, req)
+
+	var resp struct {
+		Success bool `json:"success"`
+		Data    []struct {
+			Id                       int    `json:"id"`
+			Username                 string `json:"username"`
+			TodayTokens              int64  `json:"today_tokens"`
+			TodayQuota               int64  `json:"today_quota"`
+			EffectiveDailyTokenLimit int64  `json:"effective_daily_token_limit"`
+			EffectiveDailyQuotaLimit int64  `json:"effective_daily_quota_limit"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("解析失败: %v，body=%s", err, w.Body.String())
+	}
+	if !resp.Success || len(resp.Data) != 1 {
+		t.Fatalf("响应不符: %s", w.Body.String())
+	}
+	if resp.Data[0].Id != u.Id || resp.Data[0].Username != "bob" {
+		t.Fatalf("原有用户字段未保留: %s", w.Body.String())
+	}
+	if resp.Data[0].TodayTokens != 150 || resp.Data[0].TodayQuota != 45 {
+		t.Fatalf("搜索行的今日用量必须与分页列表一致: %s", w.Body.String())
+	}
+	if resp.Data[0].EffectiveDailyTokenLimit != 5000 {
+		t.Fatalf("搜索行的生效 token 上限应为 5000，实际 %d: %s",
+			resp.Data[0].EffectiveDailyTokenLimit, w.Body.String())
+	}
+}
+
 // TestGetAllUsersQueriesTodayUsageOncePerPage 锁定"每页只查一次、不是每行一次"这一
 // 约束：整页三个用户，daily_usage 的 SELECT 必须恰好是 1 次。
 func TestGetAllUsersQueriesTodayUsageOncePerPage(t *testing.T) {

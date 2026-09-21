@@ -195,6 +195,35 @@ type UserListItem struct {
 	EffectiveDailyQuotaLimit int64 `json:"effective_daily_quota_limit"`
 }
 
+// buildUserListItems 为一批用户附加今日用量与生效上限，供用户列表的分页与搜索两条路径共用。
+// SearchUsers 此前直接返回裸 model.User，四个附加字段缺失时管理端会渲染成「0 / 不限」——
+// 一个"没有用量、也没有上限"的错误正面断言。每批只查一次 daily_usage，不是每行一次。
+func buildUserListItems(users []*model.User) ([]*UserListItem, error) {
+	userIds := make([]int, 0, len(users))
+	for _, user := range users {
+		userIds = append(userIds, user.Id)
+	}
+	usages, err := model.GetDailyUsages(userIds, model.Today())
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*UserListItem, 0, len(users))
+	for _, user := range users {
+		item := &UserListItem{
+			User:                     user,
+			EffectiveDailyTokenLimit: user.EffectiveDailyTokenLimit(),
+			EffectiveDailyQuotaLimit: user.EffectiveDailyQuotaLimit(),
+		}
+		if usage, ok := usages[user.Id]; ok {
+			item.TodayTokens = usage.PromptTokens + usage.CompletionTokens
+			item.TodayQuota = usage.Quota
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func GetAllUsers(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
@@ -211,32 +240,13 @@ func GetAllUsers(c *gin.Context) {
 		return
 	}
 
-	userIds := make([]int, 0, len(users))
-	for _, user := range users {
-		userIds = append(userIds, user.Id)
-	}
-	// 每页只查一次今日用量，不是每行一次
-	usages, err := model.GetDailyUsages(userIds, model.Today())
+	items, err := buildUserListItems(users)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
 		})
 		return
-	}
-
-	items := make([]*UserListItem, 0, len(users))
-	for _, user := range users {
-		item := &UserListItem{
-			User:                     user,
-			EffectiveDailyTokenLimit: user.EffectiveDailyTokenLimit(),
-			EffectiveDailyQuotaLimit: user.EffectiveDailyQuotaLimit(),
-		}
-		if usage, ok := usages[user.Id]; ok {
-			item.TodayTokens = usage.PromptTokens + usage.CompletionTokens
-			item.TodayQuota = usage.Quota
-		}
-		items = append(items, item)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -256,10 +266,20 @@ func SearchUsers(c *gin.Context) {
 		})
 		return
 	}
+	// 搜索结果与分页列表返回同一形状：管理端三个主题都直接读这四个字段，
+	// 缺失会渲染成「0 / 不限」
+	items, err := buildUserListItems(users)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    items,
 	})
 	return
 }

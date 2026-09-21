@@ -12,6 +12,43 @@ import (
 	"github.com/songquanpeng/one-api/common"
 )
 
+// 测试钉住的"本地时区"：+08。
+// TZ 用 POSIX 记法而不是 IANA 名："UTC-8" 表示 8 小时以东（= UTC+8），glibc 与
+// Windows CRT 都按同一语义解析；"Asia/Shanghai" 这种 IANA 名 Windows 的 CRT 会
+// 解析成一个带美式夏令时的垃圾时区（实测 3 月偏移 +1h），两边就对不上了。
+const (
+	testTZEnv        = "UTC-8"
+	testTZOffsetSecs = 8 * 3600
+	testTZOffsetName = "UTC+8(test)"
+)
+
+// pinNonUTCLocalZone 把「本地时间」同时钉在进程与 SQLite 两边。
+// 两边都要设：SQLite 的 'localtime' 走 C 库的本地时区（认 TZ），而 Go 会缓存
+// time.Local，改 TZ 不会影响它（Windows 上更完全忽略 TZ）。
+// 为什么必须非 UTC：ubuntu-latest 上 TZ 未设置时，Go 的 time.Local 与 SQLite 的
+// 'localtime' 都是 UTC，"23:59 与次日 00:01 落在不同日桶"会无条件成立，
+// 去掉 'localtime' 修饰符测试照样通过——那个守卫就是空的。
+func pinNonUTCLocalZone(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	oldLocal := time.Local
+	t.Setenv("TZ", testTZEnv)
+	time.Local = time.FixedZone(testTZOffsetName, testTZOffsetSecs)
+	t.Cleanup(func() { time.Local = oldLocal })
+
+	// 再问 SQLite 一次它实际用的偏移：若为 0，说明 TZ 没被 C 库采纳（或进程更早
+	// 已经缓存过别的时区），本地日与 UTC 日重合，断言会退化成恒真。宁可红，不要空守卫。
+	var offset int64
+	if err := db.Raw(
+		`SELECT CAST(strftime('%s', datetime(0, 'unixepoch', 'localtime')) AS INTEGER)`,
+	).Row().Scan(&offset); err != nil {
+		t.Fatalf("读取 SQLite 本地时区偏移失败: %v", err)
+	}
+	if offset != testTZOffsetSecs {
+		t.Fatalf("SQLite 的 'localtime' 偏移 = %d 秒，期望 %d 秒（TZ=%q 未被 C 库采纳，本断言会失去区分力）",
+			offset, testTZOffsetSecs, testTZEnv)
+	}
+}
+
 // setupLogTestDB 用临时 sqlite 作为 LOG_DB，并强制 UsingSQLite 走本地时间分桶分支。
 func setupLogTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -50,6 +87,10 @@ func localTime(y int, mo time.Month, d, h, mi, s int) int64 {
 
 func TestSearchLogsByDayAndModelSplitsLocalDayBoundary(t *testing.T) {
 	db := setupLogTestDB(t)
+	// 只在非 UTC 时区下这个断言才有区分力：钉 +08 之后，
+	// 2026-03-10 23:59 本地 = 2026-03-10 15:59 UTC，2026-03-11 00:01 本地 = 2026-03-10 16:01 UTC，
+	// 去掉 'localtime' 后两条都会落进 UTC 的 2026-03-10 → 只剩 1 个桶 → 下面的 len(got) != 2 失败。
+	pinNonUTCLocalZone(t, db)
 
 	rows := []Log{
 		{UserId: 1, Username: "alice", TokenName: "t1", ModelName: "gpt-3.5-turbo", Type: LogTypeConsume,
