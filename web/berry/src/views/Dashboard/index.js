@@ -71,9 +71,10 @@ const Dashboard = () => {
           // 折线图与柱状图共用同一份桶集合
           const dates = getDateRange(filters.start, filters.end, filters.granularity);
           const lineData = getLineDataGroup(data, dates);
-          setRequestChart(getLineCardOption(lineData, 'RequestCount'));
-          setQuotaChart(getLineCardOption(lineData, 'Quota'));
-          setTokenChart(getLineCardOption(lineData, 'PromptTokens'));
+          // 卡片数值按今天的桶统计，需要知道当前粒度（day 一个桶 / hour 当天所有小时桶）
+          setRequestChart(getLineCardOption(lineData, 'RequestCount', filters.granularity));
+          setQuotaChart(getLineCardOption(lineData, 'Quota', filters.granularity));
+          setTokenChart(getLineCardOption(lineData, 'PromptTokens', filters.granularity));
           setStatisticalData(getBarDataGroup(data, dates));
         }
       } else {
@@ -384,11 +385,19 @@ function getBarDataGroup(data, dates) {
   return { data: result, xaxis: dates };
 }
 
-function getLineCardOption(lineDataGroup, field) {
-  let todayValue = 0;
+function getLineCardOption(lineDataGroup, field, granularity) {
+  // 卡片标题是「今日 X」，数值就必须只来自今天那些桶：
+  // day 粒度是今天这一个桶，hour 粒度是今天所有小时桶的合计（而不是「当前这个小时」）。
+  // 区间完全不包含今天时给不出今日数值，返回「-」而不是 0 —— 0 等于断言今天没有用量。
+  const today = dayjs().format('YYYY-MM-DD');
+  const todayBuckets = lineDataGroup.filter((item) => {
+    const label = String(item.date || '');
+    return granularity === 'hour' ? label.startsWith(today) : label === today;
+  });
+  const sumOf = (pick) => todayBuckets.reduce((total, item) => total + pick(item), 0);
+
   let chartData = null;
-  const lastItem = lineDataGroup.length - 1;
-  let lineData = lineDataGroup.map((item, index) => {
+  let lineData = lineDataGroup.map((item) => {
     let tmp = {
       date: item.date,
       value: item[field]
@@ -401,27 +410,36 @@ function getLineCardOption(lineDataGroup, field) {
         tmp.value += item.CompletionTokens;
         break;
     }
-
-    if (index == lastItem) {
-      todayValue = tmp.value;
-    }
     return tmp;
   });
 
   switch (field) {
     case 'RequestCount':
       chartData = generateChartOptions(lineData, '次');
-      todayValue = renderNumber(todayValue);
       break;
     case 'Quota':
       chartData = generateChartOptions(lineData, '美元');
-      todayValue = '$' + renderNumber(todayValue);
       break;
     case 'PromptTokens':
       chartData = generateChartOptions(lineData, '');
-      todayValue = renderNumber(todayValue);
       break;
   }
 
-  return { chartData: chartData, todayValue: todayValue };
+  let todayValue = null;
+  if (todayBuckets.length > 0) {
+    switch (field) {
+      case 'RequestCount':
+        todayValue = renderNumber(sumOf((item) => item.RequestCount));
+        break;
+      case 'Quota':
+        // 先按数值求和再做额度格式化：calculateQuota 返回字符串，直接相加会变成字符串拼接
+        todayValue = '$' + renderNumber(calculateQuota(sumOf((item) => item.Quota), 3));
+        break;
+      case 'PromptTokens':
+        todayValue = renderNumber(sumOf((item) => item.PromptTokens + item.CompletionTokens));
+        break;
+    }
+  }
+
+  return { chartData: chartData, todayValue: todayValue === null ? '-' : todayValue };
 }
