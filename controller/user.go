@@ -184,6 +184,17 @@ func Register(c *gin.Context) {
 	return
 }
 
+// UserListItem 在用户记录上附加今日用量与生效上限。
+// 刻意不把这些字段加到 model.User 上：那会改变备份导出的 JSON 结构，
+// 而 model/backup_test.go 对导出/导入做往返比较。
+type UserListItem struct {
+	*model.User
+	TodayTokens              int64 `json:"today_tokens"`
+	TodayQuota               int64 `json:"today_quota"`
+	EffectiveDailyTokenLimit int64 `json:"effective_daily_token_limit"`
+	EffectiveDailyQuotaLimit int64 `json:"effective_daily_quota_limit"`
+}
+
 func GetAllUsers(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
@@ -192,7 +203,6 @@ func GetAllUsers(c *gin.Context) {
 
 	order := c.DefaultQuery("order", "")
 	users, err := model.GetAllUsers(p*config.ItemsPerPage, config.ItemsPerPage, order)
-
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -201,10 +211,38 @@ func GetAllUsers(c *gin.Context) {
 		return
 	}
 
+	userIds := make([]int, 0, len(users))
+	for _, user := range users {
+		userIds = append(userIds, user.Id)
+	}
+	// 每页只查一次今日用量，不是每行一次
+	usages, err := model.GetDailyUsages(userIds, model.Today())
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	items := make([]*UserListItem, 0, len(users))
+	for _, user := range users {
+		item := &UserListItem{
+			User:                     user,
+			EffectiveDailyTokenLimit: user.EffectiveDailyTokenLimit(),
+			EffectiveDailyQuotaLimit: user.EffectiveDailyQuotaLimit(),
+		}
+		if usage, ok := usages[user.Id]; ok {
+			item.TodayTokens = usage.PromptTokens + usage.CompletionTokens
+			item.TodayQuota = usage.Quota
+		}
+		items = append(items, item)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    users,
+		"data":    items,
 	})
 }
 
