@@ -5,8 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"strings"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
+	"github.com/songquanpeng/one-api/common"
 )
 
 // setupModelTestDB 用临时 sqlite 替换包级 DB，并在测试结束还原。
@@ -122,5 +127,71 @@ func TestGetDailyUsagesBulk(t *testing.T) {
 	}
 	if usages[1].PromptTokens != 10 || usages[2].PromptTokens != 20 {
 		t.Fatalf("批量读取数值错误: %+v", usages)
+	}
+}
+
+// sqlRecorder 捕获 GORM 输出的 SQL，用于断言生成的语句形态（无需真实数据库）。
+type sqlRecorder struct {
+	lines []string
+}
+
+func (r *sqlRecorder) Write(p []byte) (int, error) {
+	r.lines = append(r.lines, string(p))
+	return len(p), nil
+}
+
+func (r *sqlRecorder) Printf(format string, args ...interface{}) {
+	r.lines = append(r.lines, fmt.Sprintf(format, args...))
+}
+
+func (r *sqlRecorder) String() string {
+	out := ""
+	for _, l := range r.lines {
+		out += l
+	}
+	return out
+}
+
+// 回归守卫：PostgreSQL 的 ON CONFLICT DO UPDATE 里，SET 右侧若用未限定列名会与
+// excluded 同名而报 "column reference ... is ambiguous"（SQLSTATE 42702），
+// 结果是累加静默失败、单日上限永不触发。本测试断言 PG 模式下必须带表名限定。
+func TestRecordDailyUsageQualifiesColumnsOnPostgreSQL(t *testing.T) {
+	setupModelTestDB(t)
+
+	oldPG := common.UsingPostgreSQL
+	t.Cleanup(func() { common.UsingPostgreSQL = oldPG })
+
+	rec := &sqlRecorder{}
+	oldDB := DB
+	DB = DB.Session(&gorm.Session{
+		DryRun: true,
+		Logger: gormlogger.New(rec, gormlogger.Config{LogLevel: gormlogger.Info}),
+	})
+	t.Cleanup(func() { DB = oldDB })
+
+	// PG 模式：必须限定
+	common.UsingPostgreSQL = true
+	if err := RecordDailyUsage(1, 10, 5, 3); err != nil {
+		t.Fatalf("dry-run 记账失败: %v", err)
+	}
+	pgSQL := rec.String()
+	if !strings.Contains(pgSQL, "daily_usage.prompt_tokens") ||
+		!strings.Contains(pgSQL, "daily_usage.completion_tokens") ||
+		!strings.Contains(pgSQL, "daily_usage.quota") {
+		t.Fatalf("PostgreSQL 模式下 SET 右侧必须带表名限定，实际 SQL:\n%s", pgSQL)
+	}
+
+	// 非 PG 模式：保持未限定（MySQL 的 ON DUPLICATE KEY UPDATE 与 SQLite 都按当前行解析）
+	rec.lines = nil
+	common.UsingPostgreSQL = false
+	if err := RecordDailyUsage(1, 10, 5, 3); err != nil {
+		t.Fatalf("dry-run 记账失败: %v", err)
+	}
+	otherSQL := rec.String()
+	if strings.Contains(otherSQL, "daily_usage.prompt_tokens") {
+		t.Fatalf("非 PostgreSQL 方言不应带表名限定，实际 SQL:\n%s", otherSQL)
+	}
+	if !strings.Contains(otherSQL, "prompt_tokens") {
+		t.Fatalf("未生成累加表达式，实际 SQL:\n%s", otherSQL)
 	}
 }

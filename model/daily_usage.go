@@ -60,14 +60,22 @@ func RecordDailyUsage(userId int, promptTokens, completionTokens, quota int64) e
 		CompletionTokens: completionTokens,
 		Quota:            quota,
 	}
-	// SET 右边用未限定列名：MySQL 的 ON DUPLICATE KEY UPDATE、SQLite/PostgreSQL 的
-	// ON CONFLICT DO UPDATE 都把它解析为已存在行的当前值，三方言通用。
+	// SET 右侧必须引用"已存在行"的当前值，但三种方言的限定方式不同：
+	//   MySQL    —— ON DUPLICATE KEY UPDATE 里未限定列名即指当前行；
+	//   SQLite   —— DO UPDATE SET 里未限定列名解析为目标表；
+	//   PostgreSQL —— 必须用表名限定，否则 INSERT 的目标表与 excluded 表同名，
+	//                PostgreSQL 会报 "column reference ... is ambiguous"（SQLSTATE 42702）。
+	// 这个差异曾经导致 PG 上累加静默失败、单日上限永不触发，故按方言分支。
+	prefix := ""
+	if common.UsingPostgreSQL {
+		prefix = "daily_usage."
+	}
 	return DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "day"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
-			"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
-			"quota":             gorm.Expr("quota + ?", quota),
+			"prompt_tokens":     gorm.Expr(prefix+"prompt_tokens + ?", promptTokens),
+			"completion_tokens": gorm.Expr(prefix+"completion_tokens + ?", completionTokens),
+			"quota":             gorm.Expr(prefix+"quota + ?", quota),
 		}),
 	}).Create(&usage).Error
 }
