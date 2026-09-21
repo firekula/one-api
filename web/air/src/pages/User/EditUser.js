@@ -5,6 +5,43 @@ import { renderQuotaWithPrompt } from '../../helpers/render';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import { Button, Divider, Input, Select, SideSheet, Space, Spin, Typography } from '@douyinfe/semi-ui';
 
+// 单日上限三态：follow 提交 0（跟随全局默认）、exempt 提交 -1（豁免）、custom 提交不小于 1 的正整数
+const dailyLimitModeOptions = [
+  { label: '跟随全局默认', value: 'follow' },
+  { label: '豁免（不限制）', value: 'exempt' },
+  { label: '自定义', value: 'custom' }
+];
+
+// 由后端原始值推导三态，必须在任何钳制之前调用
+const resolveLimitMode = (value) => {
+  if (value === null || value === undefined || value === 0) {
+    return 'follow';
+  }
+  return value < 0 ? 'exempt' : 'custom';
+};
+
+// 把三态编码成后端约定：follow = 0、exempt = -1、custom >= 1
+const encodeLimitMode = (mode, value) => {
+  if (mode === 'follow') {
+    return 0;
+  }
+  if (mode === 'exempt') {
+    return -1;
+  }
+  return Math.max(parseInt(value) || 0, 1);
+};
+
+// 切换模式时归一化数字输入，保证「界面显示的值」与「保存下去的值」一致：
+// - 离开「自定义」：归零，避免卸载的输入里残留旧值；
+// - 进入「自定义」：当前值若不是不小于 1（跟随与豁免的展示值都被钳制成 0），先播种 1，
+//   否则界面显示 0 而保存会静默存下 1。
+const resolveModeSwitchValue = (nextMode, currentValue) => {
+  if (nextMode !== 'custom') {
+    return 0;
+  }
+  return Number(currentValue) >= 1 ? currentValue : 1;
+};
+
 const EditUser = (props) => {
   const userId = props.editingUser.id;
   const [loading, setLoading] = useState(true);
@@ -16,13 +53,31 @@ const EditUser = (props) => {
     wechat_id: '',
     email: '',
     quota: 0,
-    group: 'default'
+    group: 'default',
+    daily_token_limit: 0,
+    daily_quota_limit: 0
   });
+  const [dailyTokenMode, setDailyTokenMode] = useState('follow');
+  const [dailyQuotaMode, setDailyQuotaMode] = useState('follow');
   const [groupOptions, setGroupOptions] = useState([]);
-  const { username, display_name, password, github_id, wechat_id, telegram_id, email, quota, group } =
-    inputs;
+  const { username, display_name, password, github_id, wechat_id, telegram_id, email, quota, group,
+    daily_token_limit, daily_quota_limit } = inputs;
   const handleInputChange = (name, value) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
+  };
+  const handleDailyTokenModeChange = (nextMode) => {
+    setDailyTokenMode(nextMode);
+    setInputs((inputs) => ({
+      ...inputs,
+      daily_token_limit: resolveModeSwitchValue(nextMode, inputs.daily_token_limit)
+    }));
+  };
+  const handleDailyQuotaModeChange = (nextMode) => {
+    setDailyQuotaMode(nextMode);
+    setInputs((inputs) => ({
+      ...inputs,
+      daily_quota_limit: resolveModeSwitchValue(nextMode, inputs.daily_quota_limit)
+    }));
   };
   const fetchGroups = async () => {
     try {
@@ -50,7 +105,16 @@ const EditUser = (props) => {
     const { success, message, data } = res.data;
     if (success) {
       data.password = '';
-      setInputs(data);
+      // 先按后端原始值判定三态，再做钳制：若先钳制，存量为 -1 的豁免会被算成 0（跟随全局），
+      // 用户下一次保存就把豁免静默改掉了。
+      setDailyTokenMode(resolveLimitMode(data.daily_token_limit));
+      setDailyQuotaMode(resolveLimitMode(data.daily_quota_limit));
+      // 输入框只在「自定义」模式下使用，展示的必须是正数：负值/空值一律钳制成 0
+      setInputs({
+        ...data,
+        daily_token_limit: Math.max(data.daily_token_limit || 0, 0),
+        daily_quota_limit: Math.max(data.daily_quota_limit || 0, 0)
+      });
     } else {
       showError(message);
     }
@@ -66,15 +130,23 @@ const EditUser = (props) => {
 
   const submit = async () => {
     setLoading(true);
+    // 三态编码：follow 必须显式发 0。这两个字段在模型里是 *int64，正是为了绕开 GORM 结构体
+    // Updates 跳过零值；发 null 或省略键会让上一次设置的上限静默留存在库里。
+    // 模式本身只是组件 state（不在 inputs 里），所以不会有界面专用的键混进请求体。
+    const data = {
+      ...inputs,
+      daily_token_limit: encodeLimitMode(dailyTokenMode, inputs.daily_token_limit),
+      daily_quota_limit: encodeLimitMode(dailyQuotaMode, inputs.daily_quota_limit)
+    };
     let res = undefined;
     if (userId) {
-      let data = { ...inputs, id: parseInt(userId) };
+      data.id = parseInt(userId);
       if (typeof data.quota === 'string') {
         data.quota = parseInt(data.quota);
       }
       res = await API.put(`/api/user/`, data);
     } else {
-      res = await API.put(`/api/user/self`, inputs);
+      res = await API.put(`/api/user/self`, data);
     }
     const { success, message } = res.data;
     if (success) {
@@ -171,6 +243,62 @@ const EditUser = (props) => {
                 type={'number'}
                 autoComplete="new-password"
               />
+              <div style={{ marginTop: 20 }}>
+                <Typography.Text>{'单日 Token 上限'}</Typography.Text>
+              </div>
+              <Select
+                placeholder={'请选择单日 Token 上限'}
+                name="daily_token_mode"
+                fluid
+                onChange={value => handleDailyTokenModeChange(value)}
+                value={dailyTokenMode}
+                autoComplete="new-password"
+                optionList={dailyLimitModeOptions}
+              />
+              {
+                dailyTokenMode === 'custom' && <>
+                  <div style={{ marginTop: 20 }}>
+                    <Typography.Text>{'单日 Token 上限值'}</Typography.Text>
+                  </div>
+                  <Input
+                    name="daily_token_limit"
+                    placeholder={'请输入单日 Token 上限，不小于 1'}
+                    onChange={value => handleInputChange('daily_token_limit', value)}
+                    value={daily_token_limit}
+                    type={'number'}
+                    min={1}
+                    autoComplete="new-password"
+                  />
+                </>
+              }
+              <div style={{ marginTop: 20 }}>
+                <Typography.Text>{'单日额度上限'}</Typography.Text>
+              </div>
+              <Select
+                placeholder={'请选择单日额度上限'}
+                name="daily_quota_mode"
+                fluid
+                onChange={value => handleDailyQuotaModeChange(value)}
+                value={dailyQuotaMode}
+                autoComplete="new-password"
+                optionList={dailyLimitModeOptions}
+              />
+              {
+                dailyQuotaMode === 'custom' && <>
+                  <div style={{ marginTop: 20 }}>
+                    <Typography.Text>{`单日额度上限值${renderQuotaWithPrompt(daily_quota_limit)}`}</Typography.Text>
+                  </div>
+                  <Input
+                    name="daily_quota_limit"
+                    placeholder={'请输入单日额度上限，不小于 1'}
+                    onChange={value => handleInputChange('daily_quota_limit', value)}
+                    value={daily_quota_limit}
+                    type={'number'}
+                    min={1}
+                    autoComplete="new-password"
+                  />
+                </>
+              }
             </>
           }
           <Divider style={{ marginTop: 20 }}>以下信息不可修改</Divider>

@@ -43,6 +43,18 @@ const UsersTable = () => {
           <Tooltip content={'调用次数'}>
             <Tag color="white" size="large">{renderNumber(record.request_count)}</Tag>
           </Tooltip>
+          <Tooltip content={'今日 token / 单日上限'}>
+            <Tag color="white" size="large">
+              {renderNumber(record.today_tokens || 0)}
+              {record.effective_daily_token_limit > 0 ? ` / ${renderNumber(record.effective_daily_token_limit)}` : ' / 不限'}
+            </Tag>
+          </Tooltip>
+          <Tooltip content={'今日额度 / 单日上限'}>
+            <Tag color="white" size="large">
+              {renderQuota(record.today_quota || 0)}
+              {record.effective_daily_quota_limit > 0 ? ` / ${renderQuota(record.effective_daily_quota_limit)}` : ' / 不限'}
+            </Tag>
+          </Tooltip>
         </Space>
       </div>);
     }

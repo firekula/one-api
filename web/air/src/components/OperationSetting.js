@@ -10,6 +10,8 @@ const OperationSetting = () => {
     QuotaForInvitee: 0,
     QuotaRemindThreshold: 0,
     PreConsumedQuota: 0,
+    DailyTokenLimitDefault: 0,
+    DailyQuotaLimitDefault: 0,
     ModelRatio: '',
     CompletionRatio: '',
     GroupRatio: '',
@@ -125,6 +127,12 @@ const OperationSetting = () => {
         }
         if (originInputs['PreConsumedQuota'] !== inputs.PreConsumedQuota) {
           await updateOption('PreConsumedQuota', inputs.PreConsumedQuota);
+        }
+        if (originInputs['DailyTokenLimitDefault'] !== inputs.DailyTokenLimitDefault) {
+          await updateOption('DailyTokenLimitDefault', inputs.DailyTokenLimitDefault);
+        }
+        if (originInputs['DailyQuotaLimitDefault'] !== inputs.DailyQuotaLimitDefault) {
+          await updateOption('DailyQuotaLimitDefault', inputs.DailyQuotaLimitDefault);
         }
         break;
       case 'general':
@@ -350,6 +358,26 @@ const OperationSetting = () => {
               type='number'
               min='0'
               placeholder='请求结束后多退少补'
+            />
+            <Form.Input
+              label='单日 Token 上限（全局默认）'
+              name='DailyTokenLimitDefault'
+              onChange={handleInputChange}
+              autoComplete='new-password'
+              value={inputs.DailyTokenLimitDefault}
+              type='number'
+              min='0'
+              placeholder='0 表示不限制'
+            />
+            <Form.Input
+              label='单日额度上限（全局默认）'
+              name='DailyQuotaLimitDefault'
+              onChange={handleInputChange}
+              autoComplete='new-password'
+              value={inputs.DailyQuotaLimitDefault}
+              type='number'
+              min='0'
+              placeholder='0 表示不限制'
             />
             <Form.Input
               label='邀请新用户奖励额度'
