@@ -3555,3 +3555,29 @@ git commit -m "docs: 用户手册补充单日用量上限与筛选候选值说�
 4. quota 维度的预估含 `config.PreConsumedQuota`（默认 500），即 `(500 + promptTokens + max_tokens) × 倍率`；对本例（gpt-3.5-turbo、max_tokens=50）约为 139，因此额度上限低于约 139 时当天**首个**请求就会被拒。这是设计要求的从严行为，但建议在用户手册（D8）中写明这层含义。
 5. 两个维度的消息呈现不一致：token 维度用原始计数，quota 维度用货币格式——与设计一致，仅记录。
 6. 本次未覆盖：流式响应、Anthropic/Audio/Image 三条准入路径（A5 已接线，本次只跑了文本路径）、跨天翻转、并发竞争同一估算值，以及 B5 落地后的用户列表「今日用量」列。
+
+---
+
+## 验收记录：Task B6 后端接口手工验收（2026-09-21）
+
+**结果：通过** —— 计划的 4 个步骤全部 PASS，无产品代码改动。完整证据（逐条命令与原始输出、全部 62 次请求的响应体）见 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/task-B6-report.md`。
+
+驱动方式：复用 A7 的 e2e harness，但需 (1) 用当前 HEAD（含 B5 `237142f`）**重建 `one-api.exe`**，(2) **重新登录**（A7 遗留 cookie 已失效），(3) 新建第二个/第三个有日志的用户——A7 遗留库里只有 `dailytest` 一人有消费日志，"全站 vs 本人"无法区分。为满足计划的"至少跨两个模型"，先用 `PUT /api/channel/` 把 stub 渠道扩为 `gpt-3.5-turbo,gpt-4`，并让 root 用自建令牌 `roott` 打 2 次 `gpt-4`；另建 `dashclean`（id=3，role 1）打 3 次 `gpt-3.5-turbo` 作为无污染对照。最终数据：root 4 次/9600、dailytest 5 次/250、dashclean 3 次/150，跨两模型、两小时桶。会话 cookie 与系统访问令牌（`Authorization: Bearer`，`GET /api/user/token`）两种身份各验一遍。
+
+- **Step 2 总览全站与筛选 PASS**：`scope=all` 返回全站两模型（`3次/150` + `2次/4800`）；`scope=all&username=dailytest` 只剩 `gpt-3.5-turbo 3/150`；换成 `username=root` 只剩 `gpt-4 2/4800`（互补结果，证明真收窄）；`scope=all&granularity=hour` 桶标签为 `2026-09-21 10:00` / `2026-09-21 11:00`，与 DB 中 `datetime(...,'localtime')` 的 10:32:53 / 11:03:34 逐一对应。
+- **Step 3 权限与校验 PASS**：非管理员（cookie 与 Bearer 两种）请求 `scope=all` 均 **403**（`无权查看全站统计`，`data:null`）；`start_timestamp=2000&end_timestamp=1000` **400**（`无效的时间范围`）；天粒度 400 天 **400**（`天粒度最多查询 366 天`），小时粒度 100 天 **400**（`小时粒度最多查询 90 天`），恰好 366 天为 200（上限是闭区间）。
+- **最关键属性 1：非管理员无法通过任何参数组合拿到全站数据 PASS**：12 个组合全部只返回本人数据，无一次泄漏——`scope=all`（dailytest 与 dashclean 两个非管理员）403；`scope=all&username=dailytest` 403；`username=root`（无 `scope`）、`scope=self&username=root`、`scope=ALL`、无参数、`scope=self&model_name=gpt-4`、`scope=self&username=root&token_name=roott&model_name=gpt-4&granularity=hour` 均返回本人基线（3 次/150，`null`），而非 root 的 4 次/9600；`/api/log/filters?username=root`（cookie 与 Bearer）仍只有本人令牌。相邻接口同样无旁路：`/api/log/self/stat?username=root` 返回本人 150（非全站 10000），`/api/log/self` 的行的 username 只有自己（`GetLogsSelfStat` 用 `ctxkey.Username`、`GetUserLogs` 用 `ctxkey.Id`，都不读 query）。**未发现 Critical 问题。**
+- **最关键属性 2：管理员 `username` 筛选确实收窄 PASS**：同窗口 before（2 行/4950）→ `username=dailytest` 后 1 行/150 → `username=root` 后 1 行/4800；`username=dailytest&token_name=roott` 为 `data:null`（合取过滤，不串用户）。
+- **Step 4 候选值接口 PASS**：管理员三组值均非空且含三用户/四令牌/两模型；`?username=dailytest` 把 `tokens` 收窄为 `["","t1"]`、`models` 收窄为 `["","gpt-3.5-turbo"]`（`users` 按设计不随 `username` 收窄）；非管理员 `users` 为**空数组 `[]`**，`tokens`/`models` 只有自己，`?username=root` 不改变结果。
+- **Step 4b 用户列表新字段 PASS（1 个由数据解释的例外）**：`GET /api/user/?p=0` 已带 `today_tokens`/`today_quota`/`effective_daily_token_limit`/`effective_daily_quota_limit`。dashclean（360/150）与 root（480/9600）的今日值与同窗口日志统计**逐位相等**；`dailytest` 为 960/400 而日志统计为 600/250，差正好是 A7 阶段 `LogConsumeEnabled=false` 时那 3 次请求的 360 tokens/150 quota（记账独立于日志开关是设计要求），随后"每用户再打 2 次请求"的前后增量（+240 tokens；+100 与 +4800 quota）与 `daily_usage` 增量完全吻合，故判 PASS 而非 FAIL。另验 `effective_*` 三态解析：行内 `1000`→1000、`-1`（豁免）→0（不限）、`0`+全局默认 `123`→123，且全局默认不覆盖用户的显式正数；测后已把默认与用户行恢复为 0。
+
+**偏差与观察（均不阻塞，未放宽任何验收点）**：
+
+1. 无浏览器/无真人，全部走 HTTP API（会话 cookie + 访问令牌双身份），语义与计划的 `curl` 一致。
+2. A7 的 cookie 已失效、其 `one-api.exe` 早于 B5，复用 harness 必须先重新登录并重建二进制；这是复用旧 harness 的必然步骤，非计划缺失。
+3. **"今日值 == 日志统计"的前提是消费日志开启**：`LogConsumeEnabled=false` 期间的请求照常记账但不写 `type=2` 日志，故两者会有差额（本次 dailytest 即差 360/150，已归因）。将来做自动化断言应保证日志开启或使用无污染用户。
+4. `/api/log/filters` 的 `tokens`/`models` 含空字符串 `""`（错误日志的 `token_name`/`model_name` 为空），源于 `SearchLogDistinctValues` 刻意不按 `type` 过滤；前端（Part C/D）需决定是否过滤空白选项，计划与设计文档未规定，不判 FAIL。
+5. `effective_daily_*_limit` 无法区分"豁免（-1）"与"不限"（`resolveDailyLimit` 两者都返回 0，与"0 表示不限"的契约自洽）；用户列表若要显示"豁免"需另用行内原值。
+6. `scope=ALL`（大写）不报错、按 self 处理（fail-closed，无安全问题），仅记录。
+7. 本次未覆盖：三主题前端的下拉与表格渲染（Part C/D）、小时粒度跨天边界的标签衔接、并发下的聚合一致性、MySQL/PostgreSQL 分桶分支（只跑了 sqlite 的 `'localtime'` 路径）；纯逻辑分支已由 `model/log_statistic_test.go`、`model/log_distinct_test.go`、`controller/log_filters_test.go`、`controller/dashboard_test.go` 覆盖。
+8. 未发现产品缺陷，无需修复项。
