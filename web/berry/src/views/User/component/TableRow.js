@@ -103,6 +103,20 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
                 {renderNumber(item.request_count)}{' '}
               </Label>
             </Tooltip>
+            <Tooltip title={'今日 token / 单日上限'} placement="top">
+              <Label color={'primary'} variant="outlined">
+                {' '}
+                {renderNumber(item.today_tokens || 0)}
+                {item.effective_daily_token_limit > 0 ? ` / ${renderNumber(item.effective_daily_token_limit)}` : ' / 不限'}{' '}
+              </Label>
+            </Tooltip>
+            <Tooltip title={'今日额度 / 单日上限'} placement="top">
+              <Label color={'primary'} variant="outlined">
+                {' '}
+                {renderQuota(item.today_quota || 0)}
+                {item.effective_daily_quota_limit > 0 ? ` / ${renderQuota(item.effective_daily_quota_limit)}` : ' / 不限'}{' '}
+              </Label>
+            </Tooltip>
           </Stack>
         </TableCell>
         <TableCell>{renderRole(item.role)}</TableCell>

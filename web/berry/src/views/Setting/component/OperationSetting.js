@@ -26,6 +26,8 @@ const OperationSetting = () => {
     QuotaForInvitee: 0,
     QuotaRemindThreshold: 0,
     PreConsumedQuota: 0,
+    DailyTokenLimitDefault: 0,
+    DailyQuotaLimitDefault: 0,
     ModelRatio: "",
     CompletionRatio: "",
     GroupRatio: "",
@@ -157,6 +159,24 @@ const OperationSetting = () => {
         }
         if (originInputs["PreConsumedQuota"] !== inputs.PreConsumedQuota) {
           await updateOption("PreConsumedQuota", inputs.PreConsumedQuota);
+        }
+        if (
+          originInputs["DailyTokenLimitDefault"] !==
+          inputs.DailyTokenLimitDefault
+        ) {
+          await updateOption(
+            "DailyTokenLimitDefault",
+            inputs.DailyTokenLimitDefault
+          );
+        }
+        if (
+          originInputs["DailyQuotaLimitDefault"] !==
+          inputs.DailyQuotaLimitDefault
+        ) {
+          await updateOption(
+            "DailyQuotaLimitDefault",
+            inputs.DailyQuotaLimitDefault
+          );
         }
         break;
       case "general":
@@ -516,6 +536,41 @@ const OperationSetting = () => {
                 onChange={handleInputChange}
                 autoComplete="new-password"
                 placeholder="例如：1000"
+                disabled={loading}
+              />
+            </FormControl>
+          </Stack>
+          <Stack
+            direction={{ sm: "column", md: "row" }}
+            spacing={{ xs: 3, sm: 2, md: 4 }}
+          >
+            <FormControl fullWidth>
+              <InputLabel htmlFor="DailyTokenLimitDefault">
+                新用户单日 token 上限
+              </InputLabel>
+              <OutlinedInput
+                id="DailyTokenLimitDefault"
+                name="DailyTokenLimitDefault"
+                type="number"
+                value={inputs.DailyTokenLimitDefault}
+                onChange={handleInputChange}
+                label="新用户单日 token 上限"
+                placeholder="0 表示不限"
+                disabled={loading}
+              />
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel htmlFor="DailyQuotaLimitDefault">
+                新用户单日额度上限
+              </InputLabel>
+              <OutlinedInput
+                id="DailyQuotaLimitDefault"
+                name="DailyQuotaLimitDefault"
+                type="number"
+                value={inputs.DailyQuotaLimitDefault}
+                onChange={handleInputChange}
+                label="新用户单日额度上限"
+                placeholder="0 表示不限"
                 disabled={loading}
               />
             </FormControl>

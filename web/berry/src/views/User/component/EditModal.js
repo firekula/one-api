@@ -44,7 +44,9 @@ const validationSchema = Yup.object().shape({
     is: false,
     then: Yup.number().min(0, '额度 不能小于 0'),
     otherwise: Yup.number()
-  })
+  }),
+  daily_token_limit: Yup.number().min(-1, '单日上限不能小于 -1'),
+  daily_quota_limit: Yup.number().min(-1, '单日上限不能小于 -1')
 });
 
 const originInputs = {
@@ -53,7 +55,35 @@ const originInputs = {
   display_name: '',
   password: '',
   group: 'default',
-  quota: 0
+  quota: 0,
+  daily_token_limit: 0,
+  daily_quota_limit: 0
+};
+
+// 三态：follow 提交 0（跟随全局默认）、exempt 提交 -1（豁免）、custom 提交 >= 1 的正整数
+const limitModeOptions = [
+  { key: 'follow', value: 'follow', label: '跟随全局默认' },
+  { key: 'exempt', value: 'exempt', label: '豁免（不受单日上限限制）' },
+  { key: 'custom', value: 'custom', label: '自定义' }
+];
+
+// 由后端原始值推导三态，必须在任何钳制之前进行
+const resolveLimitMode = (value) => {
+  if (value === null || value === undefined || value === 0) {
+    return 'follow';
+  }
+  return value < 0 ? 'exempt' : 'custom';
+};
+
+// 把三态编码成后端约定：follow = 0、exempt = -1、custom >= 1
+const encodeLimitMode = (mode, value) => {
+  if (mode === 'follow') {
+    return 0;
+  }
+  if (mode === 'exempt') {
+    return -1;
+  }
+  return Math.max(parseInt(value) || 0, 1);
 };
 
 const EditModal = ({ open, userId, onCancel, onOk }) => {
@@ -61,15 +91,25 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
   const [inputs, setInputs] = useState(originInputs);
   const [groupOptions, setGroupOptions] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
+  const [dailyTokenMode, setDailyTokenMode] = useState('follow');
+  const [dailyQuotaMode, setDailyQuotaMode] = useState('follow');
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
     setSubmitting(true);
 
+    // follow 必须显式发 0：这两个字段在模型里是 *int64，正是为了绕开 GORM 结构体 Updates 跳过零值，
+    // 发 null 或省略键会让上一次设置的上限静默留存在库里。
+    const data = {
+      ...values,
+      daily_token_limit: encodeLimitMode(dailyTokenMode, values.daily_token_limit),
+      daily_quota_limit: encodeLimitMode(dailyQuotaMode, values.daily_quota_limit)
+    };
+
     let res;
     if (values.is_edit) {
-      res = await API.put(`/api/user/`, { ...values, id: parseInt(userId) });
+      res = await API.put(`/api/user/`, { ...data, id: parseInt(userId) });
     } else {
-      res = await API.post(`/api/user/`, values);
+      res = await API.post(`/api/user/`, data);
     }
     const { success, message } = res.data;
     if (success) {
@@ -100,7 +140,15 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
     const { success, message, data } = res.data;
     if (success) {
       data.is_edit = true;
-      setInputs(data);
+      // 先按后端原始值判定三态，再做钳制：若先钳制，存量为 -1 的豁免会被算成 0（跟随全局），
+      // 用户下一次保存就把豁免静默改掉了。
+      setDailyTokenMode(resolveLimitMode(data.daily_token_limit));
+      setDailyQuotaMode(resolveLimitMode(data.daily_quota_limit));
+      setInputs({
+        ...data,
+        daily_token_limit: Math.max(data.daily_token_limit || 0, 0),
+        daily_quota_limit: Math.max(data.daily_quota_limit || 0, 0)
+      });
     } else {
       showError(message);
     }
@@ -121,6 +169,8 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       loadUser().then();
     } else {
       setInputs(originInputs);
+      setDailyTokenMode('follow');
+      setDailyQuotaMode('follow');
     }
   }, [userId]);
 
@@ -230,6 +280,107 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                       </FormHelperText>
                     )}
                   </FormControl>
+
+                  <FormControl fullWidth sx={{ ...theme.typography.otherInput }}>
+                    <InputLabel htmlFor="channel-daily-token-limit-label">单日 token 上限</InputLabel>
+                    <Select
+                      id="channel-daily-token-limit-label"
+                      label="单日 token 上限"
+                      value={dailyTokenMode}
+                      onChange={(e) => setDailyTokenMode(e.target.value)}
+                      MenuProps={{
+                        PaperProps: {
+                          style: {
+                            maxHeight: 200
+                          }
+                        }
+                      }}
+                    >
+                      {limitModeOptions.map((option) => (
+                        <MenuItem key={option.key} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  {dailyTokenMode === 'custom' && (
+                    <FormControl
+                      fullWidth
+                      error={Boolean(touched.daily_token_limit && errors.daily_token_limit)}
+                      sx={{ ...theme.typography.otherInput }}
+                    >
+                      <InputLabel htmlFor="channel-daily-token-limit-value-label">单日 token 上限值</InputLabel>
+                      <OutlinedInput
+                        id="channel-daily-token-limit-value-label"
+                        label="单日 token 上限值"
+                        type="number"
+                        value={values.daily_token_limit}
+                        name="daily_token_limit"
+                        onBlur={handleBlur}
+                        onChange={handleChange}
+                        inputProps={{ min: 1 }}
+                        aria-describedby="helper-tex-channel-daily-token-limit-value-label"
+                      />
+                      {touched.daily_token_limit && errors.daily_token_limit && (
+                        <FormHelperText error id="helper-tex-channel-daily-token-limit-value-label">
+                          {errors.daily_token_limit}
+                        </FormHelperText>
+                      )}
+                    </FormControl>
+                  )}
+
+                  <FormControl fullWidth sx={{ ...theme.typography.otherInput }}>
+                    <InputLabel htmlFor="channel-daily-quota-limit-label">单日额度上限</InputLabel>
+                    <Select
+                      id="channel-daily-quota-limit-label"
+                      label="单日额度上限"
+                      value={dailyQuotaMode}
+                      onChange={(e) => setDailyQuotaMode(e.target.value)}
+                      MenuProps={{
+                        PaperProps: {
+                          style: {
+                            maxHeight: 200
+                          }
+                        }
+                      }}
+                    >
+                      {limitModeOptions.map((option) => (
+                        <MenuItem key={option.key} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  {dailyQuotaMode === 'custom' && (
+                    <FormControl
+                      fullWidth
+                      error={Boolean(touched.daily_quota_limit && errors.daily_quota_limit)}
+                      sx={{ ...theme.typography.otherInput }}
+                    >
+                      <InputLabel htmlFor="channel-daily-quota-limit-value-label">单日额度上限值</InputLabel>
+                      <OutlinedInput
+                        id="channel-daily-quota-limit-value-label"
+                        label="单日额度上限值"
+                        type="number"
+                        value={values.daily_quota_limit}
+                        name="daily_quota_limit"
+                        endAdornment={
+                          <InputAdornment position="end">{renderQuotaWithPrompt(values.daily_quota_limit)}</InputAdornment>
+                        }
+                        onBlur={handleBlur}
+                        onChange={handleChange}
+                        inputProps={{ min: 1 }}
+                        aria-describedby="helper-tex-channel-daily-quota-limit-value-label"
+                      />
+                      {touched.daily_quota_limit && errors.daily_quota_limit && (
+                        <FormHelperText error id="helper-tex-channel-daily-quota-limit-value-label">
+                          {errors.daily_quota_limit}
+                        </FormHelperText>
+                      )}
+                    </FormControl>
+                  )}
 
                   <FormControl fullWidth error={Boolean(touched.group && errors.group)} sx={{ ...theme.typography.otherInput }}>
                     <InputLabel htmlFor="channel-group-label">分组</InputLabel>
