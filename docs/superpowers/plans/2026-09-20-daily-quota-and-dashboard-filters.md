@@ -3581,3 +3581,27 @@ git commit -m "docs: 用户手册补充单日用量上限与筛选候选值说�
 6. `scope=ALL`（大写）不报错、按 self 处理（fail-closed，无安全问题），仅记录。
 7. 本次未覆盖：三主题前端的下拉与表格渲染（Part C/D）、小时粒度跨天边界的标签衔接、并发下的聚合一致性、MySQL/PostgreSQL 分桶分支（只跑了 sqlite 的 `'localtime'` 路径）；纯逻辑分支已由 `model/log_statistic_test.go`、`model/log_distinct_test.go`、`controller/log_filters_test.go`、`controller/dashboard_test.go` 覆盖。
 8. 未发现产品缺陷，无需修复项。
+
+---
+
+## 验收记录：Task D7 三主题整体构建与联调验收（2026-09-21）
+
+**结果：构建与 embed 通过；逐主题联调 15 项中 13 项 PASS（2 项"PASS 但有显示缺口"）；跨任务 a–f 中 a/c/e 三项 FAIL（真实缺陷）、b/d/f 三项 PASS（b 的数值不实、f 只到 HTTP 边界）。无产品代码改动。** 完整证据（每条命令、控件显示文本、请求 URL 与响应体、截图清单、失败注入方法）见 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/task-D7-report.md`。
+
+**驱动方式（重要，先说明证据性质）**：本任务以 subagent 身份执行，会话内的 `browser-use` 技能直接返回 `Browser is not available in subagent`，**无法使用官方浏览器工具**。改为用本机 Chrome（153.0.8010.52）以 `--headless=new --remote-debugging-port` 启动，并由自写的极小 CDP 驱动（只用 Node 内建 `WebSocket`/`fetch`，无第三方依赖）完成**真实 DOM 交互**：React 需原生 setter + `input/change`、语义文本定位下拉与选项、`Network.requestWillBeSent`/`getResponseBody` 记录请求与响应体、`Network.setBlockedURLs` 注入失败、逐张截图目视核对。结论一律用"控件显示文本 + 请求参数 + 响应体"三条独立证据交叉验证。驱动与截图在 gitignored 的 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/d7/`。
+
+- **Step 1 三主题构建 PASS**：`sh build.sh` 退出码 0，default/berry/air 各自 `Compiled successfully`，无 error/failed 行；产物哈希与体积互不相同（`main.8859206e.js` 1,082,412 B / `main.a55d38fe.js` 551,984 B / `main.dfab458d.js` 3,770,389 B）。
+- **Step 2 embed PASS**：`CGO_ENABLED=1 go build` 成功（108,151,602 B）；`/` 逐主题返回**本次构建**的 bundle —— `curl /` 的 `main.<hash>.js` 与磁盘产物哈希一致、`main.8859206e.js` 返回 `200 size=1082412` 字节一致（三个主题都验过），并在每次重启后由 `main.go:65 using theme <t>` 印证。
+- **逐主题 5 项联调**：三主题的 **总览 / 用户编辑 / 运营设置 / 用户列表 / 日志页全部 PASS**。要点：默认区间都是最近 7 天（`start_timestamp=1789401600&end_timestamp=1790006399`）；管理员可切「全站/仅自己」且数字随之变化（default：self `gpt-4 4/9600` → all `gpt-3.5-turbo 8/400 + gpt-4 4/9600`；berry 卡：`4/$0.019/480` → `12/$0.020/1440`）；天/小时粒度、用户/令牌/模型三个筛选在请求参数与响应体中逐条核实；**总览与日志页同窗口数字一致**（今日仅自己 = 4 次 / 9600 额度 / 480 tokens，总览与 `/api/log/stat?type=2&username=root` 双向对上）。用户编辑三态往返（default 与 air 走页面、berry 走弹窗）都做了"保存→重开读回"闭环，并单独证明 **"保存「跟随全局默认」后原值真的归零"**（PUT 里 `daily_token_limit` 由 1000 变 `0`，DB 直读为 0）。运营设置两个全局默认保存成功、**刷新后读回 1234/5678**，测后复原。用户列表三主题都在同一列给出 token 与额度两对（`960 / 不限`、`$0.00 / $0.00`），`0` 上限渲染为「不限」。日志页三个下拉都含「全部」且选后列表/统计变化（default 11→5 行、`/api/log/stat` 给 9600；非管理员仅 token/model/type）。
+- **跨任务 a–f**：
+  - **a FAIL（default 与 berry 都复现）**：先选模型再让候选收窄（切用户），请求仍带 `model_name=gpt-4`（berry 实测 `…username=dailytest&model_name=gpt-4`）而**控件显示空白**（`displayOf('模型').shown === ""`），即"筛选在生效却看不见"。default 与 berry 同形（截图 `default-3a-model-blank.png`、`berry-3a-model-blank.png`）；air 因 Semi 的 `_notExist` 合成 + `withSelected` **不存在**该陷阱。
+  - **b PASS（渲染优雅，数值不实）**：default 同一用户搜索行显示 `0 / 不限` 与 `$0.00 / 不限`，而分页行是 `960 / 不限` 与 `$0.00 / $0.00` —— 无 NaN/空白，但"今日 0""上限不限"是**错误的正面断言**；根因是 `/api/user/search` 不返回那四个字段（已知后端缺口）。berry/air 的搜索路径未单独实测。
+  - **c FAIL（berry）**：brief 记在 air 名下的"三张头部卡"实测属 berry（air 总览只有两张 VChart 图）。窗口 2026/08/01–08/31（今天在窗口外）+ 小时粒度时，后端返回 `{"data":null}`，页面卡片仍是上一个窗口的 `12 / $0.020 / 1440`，**未按代码注释给 `'-'`** —— 根因 `web/berry/src/views/Dashboard/index.js` 的 `if (data) {…}` 把"成功但空"和"失败"一起当保留旧值处理。另：小时粒度且含今天时卡片给的是**当天所有小时箱合计**（正确）。
+  - **d PASS**：air 日志页三个下拉显示选中值（初始「全部」→ 选 t1 显示「t1」→ 清回后仍显示「全部」，DOM `.semi-select-selection-text` 逐次读取）。对照：**default 与 berry 的同类控件在「全部」时是空白的**（筛选正确，仅显示缺失）。
+  - **e FAIL（air）**：`setBlockedURLs` 注入失败后，"已有数据再查询"会弹「错误：Network Error」并保留旧图（可接受）；但**首次加载即失败**时页面只显示「**所选区间内暂无数据**」，无任何错误提示 → 把"请求失败"说成"区间无数据"（误导）。真实的越界区间被前端守卫拦下并提示「错误：小时粒度最多查询 90 天」，这条是诚实的。
+  - **f PASS（到 HTTP 边界）**：置 `daily_token_limit=1`（已用 960）后在浏览器页面上下文用该用户令牌发起真实请求，返回 **403** 与可读消息 `今日 token 用量已达上限（已用 960 / 上限 1），请明日再试或联系管理员调整 (request id: …)`（`code=insufficient_user_daily_tokens`），`stub /stats` 计数不变（拒绝在上游之前）。**但三主题都没有可用的聊天客户端**（air 的「聊天」是外链 iframe、default 的 `/chat` 无内容），因此"用户在 UI 里看到这句话"未实测。
+- **附加发现（浏览器实测，属预存在缺陷，非本特性引入）**：air 日志页点「查询」会丢掉「类型」筛选 —— `onClick={refresh}` 把 click 事件当成 `localLogType` 传下去，请求变成 `…&type=[object%20Object]…`；实测"选消费→首行变消费 ✓，再点查询→管理类行又回来而控件仍显示消费"。`git show 7f7a8dc~1:web/air/src/components/LogsTable.js` 确认 `refresh(localLogType)`/`onClick={refresh}`/`htmlType="submit"` 在特性分支之前就是这样，本分支未触碰该段。
+- **非管理员矩阵（三主题全打）**：三主题总览都**没有**「数据范围/用户」控件且请求恒为 `scope=self`；日志页分别只剩 `token_name/model_name/logType`（default）、`令牌名称/模型名称/起始时间/结束时间/类型`（berry）、`令牌名称/模型名称`（air），**都没有用户名称下拉**，请求走 `/api/log/self/`，行数只有自己的日志。
+- **遗留问题（按优先级，详见报告 §7）**：①Important/两个主题：模型筛选空白却仍生效；②Important/berry：空响应不更新看板，"今日"卡片显示上个窗口数字；③Important/air：首次请求失败被显示为「所选区间内暂无数据」；④Important/**预存在**/air：点查询丢类型筛选（`type=[object Object]`）；⑤Minor/default+berry：日志页三个下拉在「全部」时显示空白（air 显示「全部」），default 总览的令牌/模型同样如此；⑥Minor：搜索行"今日用量 0 / 不限"不实（后端 `/api/user/search` 缺口，default 已实测）；⑦Minor：无内置聊天客户端，上限提示无法在 UI 端到端观察。
+- **过程与环境事实**：`SessionSecret = uuid.New().String()`（`common/config/config.go:27`）导致**每次重启都会话失效**，每轮都要重新登录；**主题在 `SetRouter` 时固定**（`router/web.go:18` 按 `config.Theme` 取静态目录与 index.html），故换主题必须重启（UI 按钮自述「设置主题（重启生效）」，实测一致）。测后已复原：三个用户单日上限 `0/0`、两个全局默认 `0`、`Theme=default`、`LogConsumeEnabled=true`（DB 直读确认），服务端最终以 default 运行。
+- **偏差**：官方浏览器工具不可用（subagent 限制），改用本机 Chrome + 自写 CDP 驱动（见上），验收点未放宽、未修改任何产品代码；canvas 图表（air 的 VChart、berry 的 ECharts）只做了截图目视与 API 数据核对，未做像素级判定；深色模式/小屏布局、小时粒度跨天/跨时区衔接、非管理员在用户列表与令牌页的字段可见性未覆盖。
