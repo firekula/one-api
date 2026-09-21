@@ -93,7 +93,7 @@ const Dashboard = () => {
 
   const isAdminUser = isAdmin();
   // 默认区间：本地今天往前 6 天，整日对齐（与「近 7 天」快捷按钮一致）
-  const [filters, setFilters] = useState({
+  const [filters, setFiltersState] = useState({
     ...buildDayRange(6),
     granularity: 'day',
     scope: 'self',
@@ -107,6 +107,22 @@ const Dashboard = () => {
     models: [],
   });
 
+  // 日期输入被清空（✕ 或半输入）时 input[type=date] 会给出空串，拼出的时间戳
+  // 是 NaN。此时返回上一次的 filters（同一对象引用，React 直接跳过重渲染），
+  // 既不提交坏区间也不发请求，图表继续显示上一次的有效数据。
+  const setFilters = (next) => {
+    setFiltersState((prev) => {
+      const merged = { ...prev, ...next };
+      if (
+        !Number.isFinite(toUnixSeconds(merged.start)) ||
+        !Number.isFinite(toUnixSeconds(merged.end))
+      ) {
+        return prev;
+      }
+      return merged;
+    });
+  };
+
   useEffect(() => {
     fetchDashboardData();
   }, [filters]);
@@ -119,9 +135,14 @@ const Dashboard = () => {
   const buildQuery = (params) => {
     const search = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== '' && value !== undefined && value !== null) {
-        search.append(key, value);
+      if (value === '' || value === undefined || value === null) {
+        return;
       }
+      // 时间戳算成 NaN 时（例如日期输入被清空）不要拼进查询串
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return;
+      }
+      search.append(key, value);
     });
     return search.toString();
   };
@@ -311,15 +332,17 @@ const Dashboard = () => {
 
   // 添加一个日期格式化函数
   const formatDate = (dateStr) => {
+    // 对空标签保持宽容：String(...) 兜底，避免 undefined 直接取 length
+    const label = String(dateStr || '');
     // 兼容 day（YYYY-MM-DD）与 hour（YYYY-MM-DD HH:00）两种桶标签
-    if (dateStr.length > 10) {
-      return dateStr.slice(5, 16);
+    if (label.length > 10) {
+      return label.slice(5, 16);
     }
     // day 标签是字面日历日：裸日期串会被 Date 按 UTC 午夜解析，
     // 负时区下会显示成前一天，因此直接按分量拼装、不做 Date 往返。
-    const parts = dateStr.split('-');
+    const parts = label.split('-');
     if (parts.length < 3) {
-      return dateStr;
+      return label;
     }
     return `${Number(parts[1])}/${Number(parts[2])}`;
   };
