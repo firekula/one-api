@@ -3271,7 +3271,7 @@ Run: `cd web/berry && DISABLE_ESLINT_PLUGIN='true' npm run build`
 - [ ] **Step 5: 提交**
 
 ```bash
-git add web/berry/src/views/User/component/EditModal.js web/berry/src/views/Setting/component/OperationSetting.js web/berry/src/views/User/TableRow.js
+git add web/berry/src/views/User/component/EditModal.js web/berry/src/views/Setting/component/OperationSetting.js web/berry/src/views/User/component/TableRow.js
 git commit -m "feat(berry): 用户单日上限设置与今日用量展示"
 ```
 
