@@ -99,11 +99,13 @@ const Dashboard = () => {
   });
 
   const isAdminUser = isAdmin();
-  // 默认区间：本地今天往前 6 天，整日对齐（与「近 7 天」快捷按钮一致）
+  // 默认区间：本地今天往前 6 天，整日对齐（与「近 7 天」快捷按钮一致）。
+  // 数据范围默认值按角色定：管理员默认看全站（可在页面内切回「仅自己」），
+  // 普通用户恒为「仅自己」——切换控件本身只对管理员渲染。
   const [filters, setFiltersState] = useState({
     ...buildDayRange(6),
     granularity: 'day',
-    scope: 'self',
+    scope: isAdminUser ? 'all' : 'self',
     username: '',
     token_name: '',
     model_name: '',
@@ -272,14 +274,29 @@ const Dashboard = () => {
     return buckets;
   };
 
-  // 处理数据以供折线图使用，按请求区间与粒度补齐缺失的桶
-  const processTimeSeriesData = () => {
+  // 桶轴 = 请求区间算出的网格 ∪ 接口回传的桶标签。
+  // 网格是按浏览器本地日历算的，后端却按服务器本地时间分桶；两者时区不一致时
+  // （典型：容器为 UTC、浏览器为 +08）回传的标签会整体落在网格之外。只认网格会把
+  // 这些行全部丢掉，出现"图表整体偏移或两端缺数据"。两种标签（YYYY-MM-DD 与
+  // YYYY-MM-DD HH:00）都是零填充，字典序排序即时间序。
+  const buildBucketAxis = () => {
+    const merged = new Set(buildBuckets());
+    data.forEach((item) => {
+      if (typeof item.Day === 'string' && item.Day !== '') {
+        merged.add(item.Day);
+      }
+    });
+    return [...merged].sort();
+  };
+
+  // 处理数据以供折线图使用，按桶轴补齐缺失的桶
+  const processTimeSeriesData = (buckets) => {
     const dailyData = {};
-    buildBuckets().forEach((bucket) => {
+    buckets.forEach((bucket) => {
       dailyData[bucket] = { date: bucket, requests: 0, quota: 0, tokens: 0 };
     });
     data.forEach((item) => {
-      // 后端返回的桶理论上都在范围内，越界时跳过而不是抛异常
+      // 桶轴已并入接口回传的标签，这里只剩"标签为空"等异常行需要跳过
       if (!dailyData[item.Day]) {
         return;
       }
@@ -292,10 +309,9 @@ const Dashboard = () => {
     );
   };
 
-  // 处理数据以供堆叠柱状图使用，桶集合与折线图保持一致
-  const processModelData = () => {
-    const buckets = buildBuckets();
-    const models = [...new Set(data.map((item) => item.ModelName))];
+  // 处理数据以供堆叠柱状图使用，桶集合与折线图保持一致；
+  // models 由调用方传入，保证图例与每个桶的 series 键完全一致
+  const processModelData = (buckets, models) => {
     const timeData = {};
     buckets.forEach((bucket) => {
       timeData[bucket] = { date: bucket };
@@ -315,22 +331,23 @@ const Dashboard = () => {
     );
   };
 
-  // 获取所有唯一的模型名称；只统计落在当前桶集合内的数据行，
-  // 保证图例与堆叠柱状图的桶集合一致（越界行在两图中都不出现）
-  const getUniqueModels = () => {
-    const buckets = new Set(buildBuckets());
+  // 获取所有唯一的模型名称；只统计落在桶轴内的数据行，保证图例与堆叠柱状图的
+  // series 一致（桶轴已并入接口回传的标签，越界行不会被丢掉了）
+  const getUniqueModels = (buckets) => {
+    const axis = new Set(buckets);
     return [
       ...new Set(
         data
-          .filter((item) => buckets.has(item.Day))
+          .filter((item) => axis.has(item.Day))
           .map((item) => item.ModelName)
       ),
     ];
   };
 
-  const timeSeriesData = processTimeSeriesData();
-  const modelData = processModelData();
-  const models = getUniqueModels();
+  const buckets = buildBucketAxis();
+  const models = getUniqueModels(buckets);
+  const timeSeriesData = processTimeSeriesData(buckets);
+  const modelData = processModelData(buckets, models);
 
   // 生成随机颜色
   const getRandomColor = (index) => {

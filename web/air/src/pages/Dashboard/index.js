@@ -29,10 +29,12 @@ const buildDefaultRange = () => {
     };
 };
 
-const initialFilters = () => ({
+// scope 由调用方按角色传入：管理员默认「全站」（可在页面内切回「仅自己」），
+// 普通用户恒为「仅自己」——普通用户的请求把 scope 强制写成 self，见 loadDashboardData。
+const initialFilters = (scope) => ({
     ...buildDefaultRange(),
     granularity: 'day',
-    scope: 'self',
+    scope,
     username: '',
     token_name: '',
     model_name: ''
@@ -267,7 +269,7 @@ const FilterItem = ({label, children}) => (
 
 const Dashboard = () => {
     const isAdminUser = isAdmin();
-    const [filters, setFiltersState] = useState(initialFilters);
+    const [filters, setFiltersState] = useState(() => initialFilters(isAdminUser ? 'all' : 'self'));
     const [candidates, setCandidates] = useState({users: [], tokens: [], models: []});
     const [loading, setLoading] = useState(false);
     const [loaded, setLoaded] = useState(false);

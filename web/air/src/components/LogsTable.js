@@ -443,8 +443,14 @@ const LogsTable = () => {
               onChange={value => handleInputChange(value, 'username')} />
           </>}
           <Form.Section>
+            {/* onClick 必须显式传当前的 logType：直接把 refresh 交给 onClick 会把 click
+                事件当成 localLogType 传下去，请求变成 type=[object Object]，类型筛选
+                被静默丢弃而控件仍显示所选的类型。
+                htmlType="submit" 保留：Semi 的 Form 无论是否传 onSubmit 都会把它自己的
+                submit 绑到 <form> 上并 e.preventDefault()（见 semi-ui 的 baseForm），
+                因此这里不会触发原生提交/刷新整页。 */}
             <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-              onClick={refresh} loading={loading}>查询</Button>
+              onClick={() => refresh(logType)} loading={loading}>查询</Button>
           </Form.Section>
         </>
       </Form>

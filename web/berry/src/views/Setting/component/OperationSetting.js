@@ -546,7 +546,7 @@ const OperationSetting = () => {
           >
             <FormControl fullWidth>
               <InputLabel htmlFor="DailyTokenLimitDefault">
-                新用户单日 token 上限
+                单日 Token 上限（全局默认）
               </InputLabel>
               <OutlinedInput
                 id="DailyTokenLimitDefault"
@@ -554,14 +554,14 @@ const OperationSetting = () => {
                 type="number"
                 value={inputs.DailyTokenLimitDefault}
                 onChange={handleInputChange}
-                label="新用户单日 token 上限"
+                label="单日 Token 上限（全局默认）"
                 placeholder="0 表示不限"
                 disabled={loading}
               />
             </FormControl>
             <FormControl fullWidth>
               <InputLabel htmlFor="DailyQuotaLimitDefault">
-                新用户单日额度上限
+                单日额度上限（全局默认）
               </InputLabel>
               <OutlinedInput
                 id="DailyQuotaLimitDefault"
@@ -569,7 +569,7 @@ const OperationSetting = () => {
                 type="number"
                 value={inputs.DailyQuotaLimitDefault}
                 onChange={handleInputChange}
-                label="新用户单日额度上限"
+                label="单日额度上限（全局默认）"
                 placeholder="0 表示不限"
                 disabled={loading}
               />

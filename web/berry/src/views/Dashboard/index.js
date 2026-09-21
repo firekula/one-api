@@ -12,12 +12,14 @@ import { API } from 'utils/api';
 import { showError, calculateQuota, renderNumber, isAdmin } from 'utils/common';
 import UserCard from 'ui-component/cards/UserCard';
 
-// 默认区间：本地今天往前 6 天，按整日对齐（与后端默认的 7 天区间一致）
-const initFilters = () => ({
+// 默认区间：本地今天往前 6 天，按整日对齐（与后端默认的 7 天区间一致）。
+// scope 由调用方按角色传入：管理员默认「全站」（可在页面内切回「仅自己」），
+// 普通用户恒为「仅自己」。
+const initFilters = (scope) => ({
   start: dayjs().subtract(6, 'day').startOf('day').toDate(),
   end: dayjs().endOf('day').toDate(),
   granularity: 'day',
-  scope: 'self',
+  scope,
   username: '',
   token_name: '',
   model_name: ''
@@ -46,7 +48,7 @@ const Dashboard = () => {
   const [quotaChart, setQuotaChart] = useState(null);
   const [tokenChart, setTokenChart] = useState(null);
   const [users, setUsers] = useState([]);
-  const [filters, setFilters] = useState(initFilters);
+  const [filters, setFilters] = useState(() => initFilters(userIsAdmin ? 'all' : 'self'));
   const [candidates, setCandidates] = useState({ users: [], tokens: [], models: [] });
 
   // 空值表示不过滤（后端只对非空值追加条件），时间戳为 NaN 时同样不提交
@@ -79,8 +81,8 @@ const Dashboard = () => {
         // 这里按空数组处理：数据为空就渲染 0 与「-」，绝不能让三张「今日 X」卡片
         // 停留在上一个区间的数字上——那是把旧数当今日数展示。
         const rows = Array.isArray(data) ? data : [];
-        // 折线图与柱状图共用同一份桶集合
-        const dates = getDateRange(filters.start, filters.end, filters.granularity);
+        // 折线图与柱状图共用同一份桶集合：网格 ∪ 接口回传的标签（见 buildBucketAxis）
+        const dates = buildBucketAxis(getDateRange(filters.start, filters.end, filters.granularity), rows);
         const lineData = getLineDataGroup(rows, dates);
         // 卡片数值按今天的桶统计，需要知道当前粒度（day 一个桶 / hour 当天所有小时桶）
         setRequestChart(getLineCardOption(lineData, 'RequestCount', filters.granularity));
@@ -339,6 +341,21 @@ const Dashboard = () => {
 };
 export default Dashboard;
 
+// 桶轴 = 请求区间算出的网格 ∪ 接口回传的桶标签。
+// 网格是按浏览器本地日历算的，后端却按服务器本地时间分桶；两者时区不一致时
+// （典型：容器为 UTC、浏览器为 +08）回传的标签会整体落在网格之外。只认网格会把
+// 这些行全部丢掉，图表整体偏移或两端缺数据。两种标签（YYYY-MM-DD 与
+// YYYY-MM-DD HH:00）都是零填充，字典序排序即时间序。
+function buildBucketAxis(dates, rows) {
+  const merged = new Set(dates);
+  rows.forEach((row) => {
+    if (typeof row.Day === 'string' && row.Day !== '') {
+      merged.add(row.Day);
+    }
+  });
+  return [...merged].sort();
+}
+
 function getLineDataGroup(statisticalData, dates) {
   let groupedData = statisticalData.reduce((acc, cur) => {
     if (!acc[cur.Day]) {
@@ -356,8 +373,7 @@ function getLineDataGroup(statisticalData, dates) {
     acc[cur.Day].CompletionTokens += cur.CompletionTokens;
     return acc;
   }, {});
-  // 桶集合由请求区间与粒度生成：不在集合里的行（越界 / 时区与后端不一致）不参与出图，
-  // 保证折线图与柱状图用的是同一份桶
+  // dates 是网格 ∪ 回传标签的桶轴：回传的标签不会因为时区不一致而被丢掉
   return dates.map((day) => {
     if (!groupedData[day]) {
       return {
@@ -384,8 +400,8 @@ function getBarDataGroup(data, dates) {
       result.push(newData);
     }
     const index = dates.indexOf(item.Day);
-    // 不在桶集合里的行直接跳过：既不能落到 indexOf 的 -1 上覆盖最后一个桶，
-    // 也不能被静默丢弃在错误的下标处
+    // 桶轴已并入回传标签，正常不会出现 -1；空标签等异常行仍要跳过，
+    // 既不能落到 indexOf 的 -1 上覆盖最后一个桶，也不能被静默丢弃在错误的下标处
     if (index === -1) {
       continue;
     }
