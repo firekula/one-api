@@ -3486,7 +3486,7 @@ git commit -m "docs: 记录三主题联调验收结果"
 
 - **两个维度独立生效**：单日 Token 上限（`prompt_tokens + completion_tokens`）与单日额度上限。
 - **三态设置**：每个用户的每个维度都可以是「跟随全局默认」「豁免（不限制）」或「单独上限」。全部用户共用的默认值在 设置 → 运营设置 里配置，`0` 表示不限制。
-- **计量口径**：在 请求准入时用估算值判断（预估 prompt tokens + `max_tokens`），请求结束后按真实用量记账。因此单个进行中的请求最多能超出上限一个响应的量。
+- **计量口径**：请求准入时用估算值判断，请求结束后按真实用量记账，因此单个进行中的请求最多能超出上限一个响应的量。两个维度的估算口径不同：token 维度是 `promptTokens + maxTokens`；quota 维度是 `getPreConsumedQuota(...) = (config.PreConsumedQuota + promptTokens + maxTokens) × 模型倍率`，其中 `config.PreConsumedQuota`（默认 500）**计入**估算。因此 quota 维度的有效下限与模型倍率相关：`daily_quota_limit` 低于约 `500 × 倍率` 时，当天**第一个**请求就会被拒——以本次验收用的 `gpt-3.5-turbo`（倍率 0.25）为例，下限约 `500 × 0.25 = 125`，再叠加本请求的 `(promptTokens + maxTokens) × 倍率`；实测（`max_tokens=50`、估算 promptTokens ≈ 8）估算值 ≈ `(500 + 8 + 50) × 0.25 ≈ 139`，故上限 150 时首个请求 200、累计 50 后的第二次 403，而低于约 139 时首个请求即 403。这是设计要求的从严行为。
 - **跨天重置**：按服务器本地日期自然重置，不需要额外操作。
 - **只约束 `/v1` 转发流量**：管理后台操作不计入。豁免用户仍受账户余额与令牌额度限制。
 - **时间口径**：按服务器本地时区划分自然日，请确保应用进程与数据库会话的时区一致。
@@ -3535,17 +3535,17 @@ git commit -m "docs: 用户手册补充单日用量上限与筛选候选值说�
 
 ## 验收记录：Task A7 单日上限的端到端验收（2026-09-21）
 
-**结果：通过** —— 6 个验收点全部 PASS，另有 2 项附加验证 PASS，无代码改动。完整证据（命令、原始输出、stub 形状、API 载荷）见 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/task-A7-report.md`。
+**结果：通过** —— 6 个验收点全部 PASS；另有 2 项附加观察**未单独取证**，仅作为观察记录、不作为 PASS（理由见下）。无代码改动。完整证据（命令、原始输出、stub 形状、API 载荷）见 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/task-A7-report.md`。
 
 驱动方式（无浏览器，按本任务允许的替代方案）：root 走 `POST /api/user/login` 取会话 cookie；上游用本地 stub（`POST /v1/chat/completions` 固定返回 `usage` 80/40）；渠道 `POST /api/channel/`（type 1，`base_url=http://127.0.0.1:18081`）；令牌 `POST /api/token/` 创建后从 `GET /api/token/` 读回 key；新建用户 `dailytest` 单独登录后建令牌。每请求结算 `quota=50`、`tokens=120`。
 
 - **1 token 维度拦截** PASS：`daily_token_limit=100`，首请求 200（累计 120），次请求 403 `insufficient_user_daily_tokens`，消息 `已用 120 / 上限 100`；stub 计数未增加（拒绝发生在上游之前），用户额度/已用额度未变（拒绝发生在预扣之前）。
 - **2 quota 维度拦截** PASS：`daily_quota_limit=150`，首请求 200（累计 50），次请求 403 `insufficient_user_daily_quota`，消息 `已用 ＄0.000100 额度 / 上限 ＄0.000300 额度`。
-- **3 预扣短路陷阱** PASS：用户额度提到 5×10¹⁴（远超 100×预扣），日志确认进入 `trusted and no need to pre-consume` 分支（preConsumedQuota 被置 0），token 与 quota 两个维度仍分别 403，证明判定用的是短路前的估算值。
+- **3 预扣短路陷阱** PASS（该结论只由 quota 维度证明）：用户额度提到 5×10¹⁴（远超 100×预扣 ≈13900），`preConsumedQuota` 会被短路置 0；本次运行的服务器日志确认该分支确实触发：`[preConsumeQuota] user 2 has enough quota 500000000000000, trusted and no need to pre-consume`。**quota 维度是判别性证据**：同一请求形态先 200 后 403（上限 150：首次 `0 + 139 ≤ 150` 通过，累计 50 后再 `50 + 139 = 189 > 150` 被拒），这一对结果把估算值限定在 `(100, 150]` 的非零区间——若用的是置 0 后的估算值，第二次会因 `50 + 0 ≤ 150` 而返回 200。**token 维度不具判别性**：该次运行中已用 token（120）本已超过上限（100），即使 `add` 为 0 也有 `used + add > limit`；且 token 维度的估算（`promptTokens + maxTokens` ≈ 58）根本不涉及 `preConsumedQuota`，故它只能证明日限生效，不能证明估算值取自短路之前。
 - **4 豁免 `-1`** PASS：`daily_token_limit=-1, daily_quota_limit=-1` 后连续 3 次请求均 200，且继续记账（120→480 tokens）；随后改回 `0` 成功，验证指针字段可回退到"跟随全局默认"。
 - **5 记账可见** PASS：`GET /api/user/?p=0` 尚无 `today_tokens/today_quota`（B5 未落地），按任务允许改为直接读表：清空后 3 次请求的 `daily_usage` 行为 `prompt 240 + completion 120 = 360` tokens、`quota 150`，与同时段 `logs type=2` 聚合完全一致。
-- **6 不依赖日志开关** PASS：`LogConsumeEnabled=false`（option 已落库为 false）后 3 次请求仍 200，`daily_usage` 由 360/150 增至 720/300，而 `logs` 的 `type=2` 行数保持 3 不变；此时把 token 上限设回 100，仍按 403 拦截（上限本身也不依赖日志）。
-- **附加** PASS：用户字段为 `0` 时正确跟随全局默认（`DailyTokenLimitDefault=100` 时报错显示"上限 100"）。
+- **6 不依赖日志开关** PASS：`LogConsumeEnabled=false`（option 已落库为 false）后 3 次请求仍 200，`daily_usage` 由 360/150 增至 720/300，而 `logs` 的 `type=2` 行数保持 3 不变。另观察到此时把 token 上限设回 `100` 仍 403（`已用 720 / 上限 100`）——**未单独取证**：该结果在「用户字段为 0 回退全局默认」与「用户字段仍为上一次的值」两种情况下都会相同，本次未回读用户行与全局默认选项确认，故不作为独立证据。
+- **附加观察（未单独取证）**：`daily_token_limit=0`、`DailyTokenLimitDefault=100` 时报错显示「上限 100」。**未单独取证**：该结果在「用户字段为 0 回退全局默认」与「用户字段仍为上一次的值」两种情况下都会相同（此时已用 720 > 上限 100，无论 `add` 是否为 0 都必然 403），本次未回读用户行与全局默认选项确认，故不作为独立证据；`resolveDailyLimit` 已有单测覆盖，判定逻辑不因此失去覆盖。
 
 **偏差与观察**（均不阻塞，未放宽任何验收点）：
 
