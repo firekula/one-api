@@ -14,7 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import {API} from '../../helpers/api';
-import {isAdmin, timestamp2string} from '../../helpers/utils';
+import {isAdmin} from '../../helpers/utils';
 import './Dashboard.css';
 
 // 在 Dashboard 组件内添加自定义配置
@@ -67,6 +67,21 @@ const sanitizeCandidates = (list) =>
     ? [...new Set(list.filter((v) => typeof v === 'string' && v.trim() !== ''))]
     : [];
 
+// 生成以本地自然日为边界的区间（起始日 00:00:00 ~ 结束日 23:59:59），
+// 与后端 GetUserDashboard 的默认区间口径一致：整日对齐，首个桶不会是半天。
+const buildDayRange = (daysAgo) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  const formatDay = (d) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - daysAgo);
+  return {
+    start: `${formatDay(start)} 00:00:00`,
+    end: `${formatDay(end)} 23:59:59`,
+  };
+};
+
 const Dashboard = () => {
   const { t } = useTranslation();
   const [data, setData] = useState([]);
@@ -77,9 +92,9 @@ const Dashboard = () => {
   });
 
   const isAdminUser = isAdmin();
+  // 默认区间：本地今天往前 6 天，整日对齐（与「近 7 天」快捷按钮一致）
   const [filters, setFilters] = useState({
-    start: timestamp2string(Date.now() / 1000 - 86400 * 6),
-    end: timestamp2string(Date.now() / 1000),
+    ...buildDayRange(6),
     granularity: 'day',
     scope: 'self',
     username: '',
@@ -157,17 +172,7 @@ const Dashboard = () => {
   };
 
   const setQuickRange = (daysAgo) => {
-    const pad = (n) => String(n).padStart(2, '0');
-    const formatDay = (d) =>
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - daysAgo);
-    setFilters({
-      ...filters,
-      start: `${formatDay(start)} 00:00:00`,
-      end: `${formatDay(end)} 23:59:59`,
-    });
+    setFilters({ ...filters, ...buildDayRange(daysAgo) });
   };
 
   const calculateSummary = (dashboardData) => {
@@ -310,11 +315,13 @@ const Dashboard = () => {
     if (dateStr.length > 10) {
       return dateStr.slice(5, 16);
     }
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('zh-CN', {
-      month: 'numeric',
-      day: 'numeric',
-    });
+    // day 标签是字面日历日：裸日期串会被 Date 按 UTC 午夜解析，
+    // 负时区下会显示成前一天，因此直接按分量拼装、不做 Date 往返。
+    const parts = dateStr.split('-');
+    if (parts.length < 3) {
+      return dateStr;
+    }
+    return `${Number(parts[1])}/${Number(parts[2])}`;
   };
 
   // 修改所有 XAxis 配置
