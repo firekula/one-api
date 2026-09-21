@@ -24,3 +24,7 @@ AGENTS.md
 .vscode/
 .idea/
 *.log
+
+# Local-only workspaces (both gitignored; must not bloat the build context)
+.worktrees/
+.superpowers/
