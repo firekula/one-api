@@ -23,10 +23,10 @@ import Log from './pages/Log';
 import Chat from './pages/Chat';
 import { Layout } from '@douyinfe/semi-ui';
 import Midjourney from './pages/Midjourney';
-import Detail from './pages/Detail';
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 
 function App() {
   const [userState, userDispatch] = useContext(UserContext);
@@ -208,10 +208,12 @@ function App() {
             }
           />
           <Route
-            path="/detail"
+            path="/dashboard"
             element={
               <PrivateRoute>
-                <Detail />
+                <Suspense fallback={<Loading></Loading>}>
+                  <Dashboard />
+                </Suspense>
               </PrivateRoute>
             }
           />

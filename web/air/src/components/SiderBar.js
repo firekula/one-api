@@ -7,7 +7,6 @@ import { API, getLogo, getSystemName, isAdmin, isMobile, showError } from '../he
 import '../index.css';
 
 import {
-  IconCalendarClock,
   IconComment,
   IconCreditCard,
   IconGift,
@@ -88,11 +87,10 @@ const SiderBar = () => {
       icon: <IconHistogram />
     },
     {
-      text: '数据看板',
-      itemKey: 'detail',
-      to: '/detail',
-      icon: <IconCalendarClock />,
-      className: localStorage.getItem('enable_data_export') === 'true' ? 'semi-navigation-item-normal' : 'tableHiddle'
+      text: '总览',
+      itemKey: 'dashboard',
+      to: '/dashboard',
+      icon: <IconHistogram />
     },
     {
       text: '绘图',
@@ -113,7 +111,7 @@ const SiderBar = () => {
     //     to: '/about',
     //     icon: <IconAt/>
     // }
-  ], [localStorage.getItem('enable_data_export'), localStorage.getItem('enable_drawing'), localStorage.getItem('chat_link'), isAdmin()]);
+  ], [localStorage.getItem('enable_drawing'), localStorage.getItem('chat_link'), isAdmin()]);
 
   const loadStatus = async () => {
     const res = await API.get('/api/status');
@@ -127,7 +125,6 @@ const SiderBar = () => {
       localStorage.setItem('quota_per_unit', data.quota_per_unit);
       localStorage.setItem('display_in_currency', data.display_in_currency);
       localStorage.setItem('enable_drawing', data.enable_drawing);
-      localStorage.setItem('enable_data_export', data.enable_data_export);
       localStorage.setItem('data_export_default_time', data.data_export_default_time);
       localStorage.setItem('default_collapse_sidebar', data.default_collapse_sidebar);
       localStorage.setItem('mj_notify_enabled', data.mj_notify_enabled);
@@ -178,7 +175,7 @@ const SiderBar = () => {
                 setting: '/setting',
                 about: '/about',
                 chat: '/chat',
-                detail: '/detail'
+                dashboard: '/dashboard'
               };
               return (
                 <Link
