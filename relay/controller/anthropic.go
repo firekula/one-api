@@ -102,6 +102,11 @@ func preConsumeQuotaAnthropic(ctx context.Context, promptTokens int, maxTokens i
 	preConsumedTokens := config.PreConsumedQuota + int64(promptTokens) + int64(maxTokens)
 	preConsumedQuota := int64(float64(preConsumedTokens) * ratio)
 
+	estimatedTokens := int64(promptTokens) + int64(maxTokens)
+	if err := model.CheckUserDailyLimit(meta.UserId, estimatedTokens, preConsumedQuota); err != nil {
+		return preConsumedQuota, dailyLimitError(err)
+	}
+
 	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
 	if err != nil {
 		return preConsumedQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
@@ -137,6 +142,9 @@ func postConsumeQuotaAnthropic(ctx context.Context, usage *relaymodel.Usage, met
 	_ = model.CacheUpdateUserQuota(ctx, meta.UserId)
 	model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
 	model.UpdateChannelUsedQuota(meta.ChannelId, quota)
+	if err := model.RecordDailyUsage(meta.UserId, int64(usage.PromptTokens), int64(usage.CompletionTokens), quota); err != nil {
+		logger.Error(ctx, "error recording daily usage: "+err.Error())
+	}
 }
 
 // estimateAnthropicPromptTokens 粗略估算 Anthropic 请求的 prompt tokens

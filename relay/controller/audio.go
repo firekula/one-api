@@ -66,6 +66,10 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	default:
 		preConsumedQuota = int64(float64(config.PreConsumedQuota) * ratio)
 	}
+	// 音频不返回真实 token，只受额度上限约束
+	if err := model.CheckUserDailyLimit(userId, 0, preConsumedQuota); err != nil {
+		return dailyLimitError(err)
+	}
 	userQuota, err := model.CacheGetUserQuota(ctx, userId)
 	if err != nil {
 		return openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)

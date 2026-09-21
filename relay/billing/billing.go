@@ -45,6 +45,10 @@ func PostConsumeQuota(ctx context.Context, tokenId int, quotaDelta int64, totalQ
 		})
 		model.UpdateUserUsedQuotaAndRequestCount(userId, totalQuota)
 		model.UpdateChannelUsedQuota(channelId, totalQuota)
+		// 音频的 token 字段不可信（billing 把 quota 写进了 PromptTokens），只累计额度
+		if err := model.RecordDailyUsage(userId, 0, 0, totalQuota); err != nil {
+			logger.SysError("error recording daily usage: " + err.Error())
+		}
 	}
 	if totalQuota <= 0 {
 		logger.Error(ctx, fmt.Sprintf("totalQuota consumed is %d, something is wrong", totalQuota))

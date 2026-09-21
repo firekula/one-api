@@ -182,6 +182,11 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		quota = int64(ratio*imageCostRatio*1000) * int64(imageRequest.N)
 	}
 
+	// 图片不返回真实 token，只受额度上限约束
+	if err := model.CheckUserDailyLimit(meta.UserId, 0, quota); err != nil {
+		return dailyLimitError(err)
+	}
+
 	if userQuota-quota < 0 {
 		return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 	}
@@ -224,6 +229,9 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
 			channelId := c.GetInt(ctxkey.ChannelId)
 			model.UpdateChannelUsedQuota(channelId, quota)
+			if err := model.RecordDailyUsage(meta.UserId, 0, 0, quota); err != nil {
+				logger.SysError("error recording daily usage: " + err.Error())
+			}
 		}
 	}(c.Request.Context())
 

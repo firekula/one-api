@@ -65,8 +65,29 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 	return int64(float64(preConsumedTokens) * ratio)
 }
 
+// dailyLimitError 把 model 层的单日上限错误映射成 relay 错误：维度决定错误码，统一 403。
+func dailyLimitError(err error) *relaymodel.ErrorWithStatusCode {
+	limitErr, ok := model.AsDailyLimitError(err)
+	if !ok {
+		return openai.ErrorWrapper(err, "check_daily_limit_failed", http.StatusInternalServerError)
+	}
+	code := "insufficient_user_daily_tokens"
+	if limitErr.Dimension == "quota" {
+		code = "insufficient_user_daily_quota"
+	}
+	return openai.ErrorWrapper(limitErr, code, http.StatusForbidden)
+}
+
 func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
 	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
+
+	// 日限判定必须在额度预扣之前，也必须用短路前的原始估算值：
+	// 下面的 "userQuota > 100*preConsumedQuota" 分支会把 preConsumedQuota 置 0，
+	// 拿置 0 后的值做判定会让额度充裕的用户永远不触发上限。
+	estimatedTokens := int64(promptTokens) + int64(textRequest.MaxTokens)
+	if err := model.CheckUserDailyLimit(meta.UserId, estimatedTokens, preConsumedQuota); err != nil {
+		return preConsumedQuota, dailyLimitError(err)
+	}
 
 	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
 	if err != nil {
@@ -138,6 +159,10 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
 	model.UpdateChannelUsedQuota(meta.ChannelId, quota)
+	// 单日用量记账：与日志开关无关，必须无条件写入
+	if err := model.RecordDailyUsage(meta.UserId, int64(promptTokens), int64(completionTokens), quota); err != nil {
+		logger.Error(ctx, "error recording daily usage: "+err.Error())
+	}
 }
 
 func getMappedModelName(modelName string, mapping map[string]string) (string, bool) {
