@@ -408,6 +408,14 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
+	if (updatedUser.DailyTokenLimit != nil && *updatedUser.DailyTokenLimit < -1) ||
+		(updatedUser.DailyQuotaLimit != nil && *updatedUser.DailyQuotaLimit < -1) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "单日上限只能是 -1（豁免）、0（跟随全局默认）或不小于 1 的整数",
+		})
+		return
+	}
 	if updatedUser.Password == "$I_LOVE_U" {
 		updatedUser.Password = "" // rollback to what it should be
 	}

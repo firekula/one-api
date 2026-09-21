@@ -29,12 +29,21 @@ func setupControllerTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Redemption{}, &model.Option{}, &model.Ability{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Redemption{}, &model.Option{}, &model.Ability{}, &model.DailyUsage{}); err != nil {
 		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.AutoMigrate(&model.Log{}); err != nil {
+		t.Fatalf("migrate logs: %v", err)
 	}
 	oldDB := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = oldDB })
+	// 未配置 LOG_SQL_DSN 时生产环境令 LOG_DB = DB（见 model.InitLogDB）。测试只替换了
+	// DB，若不同步替换 LOG_DB，任何会写管理日志的写路径（如 UpdateUser 改额度）都会
+	// 因 LOG_DB 为 nil 而空指针 panic，整包被判为 FAIL。
+	oldLogDB := model.LOG_DB
+	model.LOG_DB = db
+	t.Cleanup(func() { model.LOG_DB = oldLogDB })
 	// Windows 上必须先释放 sqlite 文件句柄，否则 t.TempDir 的清理会报
 	// "The process cannot access the file because it is being used by another process"
 	// 而把整个包判为 FAIL（Linux 允许删除已打开的文件，所以只在 Windows 暴露）。
