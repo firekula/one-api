@@ -3605,3 +3605,19 @@ git commit -m "docs: 用户手册补充单日用量上限与筛选候选值说�
 - **遗留问题（按优先级，详见报告 §7）**：①Important/两个主题：模型筛选空白却仍生效；②Important/berry：空响应不更新看板，"今日"卡片显示上个窗口数字；③Important/air：首次请求失败被**常驻**显示为「所选区间内暂无数据」（toast 会短暂出现后消失，用户看到的是这条误导信息）；④Important/**预存在**/air：点查询丢类型筛选（`type=[object Object]`）；⑤Minor/default+berry：日志页三个下拉在「全部」时显示空白（air 显示「全部」），default 总览的令牌/模型同样如此；⑥Minor：搜索行"今日用量 0 / 不限"不实（后端 `/api/user/search` 缺口，default 已实测）；⑦Minor：无内置聊天客户端，上限提示无法在 UI 端到端观察。
 - **过程与环境事实**：`SessionSecret = uuid.New().String()`（`common/config/config.go:27`）导致**每次重启都会话失效**，每轮都要重新登录；**主题在 `SetRouter` 时固定**（`router/web.go:18` 按 `config.Theme` 取静态目录与 index.html），故换主题必须重启（UI 按钮自述「设置主题（重启生效）」，实测一致）。测后已复原：三个用户单日上限 `0/0`、两个全局默认 `0`、`Theme=default`、`LogConsumeEnabled=true`（DB 直读确认），服务端最终以 default 运行。
 - **偏差**：官方浏览器工具不可用（subagent 限制），改用本机 Chrome + 自写 CDP 驱动（见上），验收点未放宽、未修改任何产品代码；canvas 图表（air 的 VChart、berry 的 ECharts）只做了截图目视与 API 数据核对，未做像素级判定；深色模式/小屏布局、小时粒度跨天/跨时区衔接、非管理员在用户列表与令牌页的字段可见性未覆盖。
+
+---
+
+## 验收记录：Task D10 整支评审六条 Important 的最终修复波（2026-09-21）
+
+**结果：六条全部修复。后端提交 `8e862f5`，前端与文档提交 `7fbbabb`。三主题重新构建（`DISABLE_ESLINT_PLUGIN='true' npm run build`）均 `Compiled successfully`；`go build ./...` 与 `CGO_ENABLED=1 go test $(go list ./... | grep -v common/image)` 全绿；缺陷 1/2/3/4a/4b/5/6 均有浏览器、变异或测试证据（完整证据见 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/task-D10-report.md`）。**
+
+- 缺陷 1（三主题总览管理员默认 `self`，与设计表「管理员默认看全站」相悖）：三主题 `scope` 初值改为 `isAdminUser ? 'all' : 'self'` —— `7fbbabb`；浏览器实测三主题初始请求均带 `scope=all`、控件显示「全站」，切「仅自己」后数字与行集同步收窄，普通用户路径未改动。
+- 缺陷 2（default/berry 丢掉不在浏览器本地网格里的桶标签）：两主题桶轴改为「本地日历网格 ∪ 接口回传标签」并排序 —— `7fbbabb`；服务器 `TZ=UTC` + 浏览器 +08 实测：回传标签 `2026-09-20 19:00` 不在浏览器那 24 个桶里，却已并进两组 x 轴（默认 25 个刻度）且该模型出现在图例中。
+- 缺陷 3（`/api/user/search` 让搜索行显示「0 / 不限」）：把 `UserListItem` 投影抽成 `buildUserListItems` 并让 `SearchUsers` 复用（`model.User` 与备份导出格式未动）—— `8e862f5`；浏览器实测 dailytest 搜索行由 `0 / 不限` 变为 `960 / 不限`，响应体带齐 `today_tokens/today_quota/effective_daily_*`。
+- 缺陷 4a（SQLite `'localtime'` 的回归守卫在 CI 上恒真）：用例改为 `TZ=UTC-8` + `time.Local=UTC+8` 双侧钉住，并断言 SQLite 实际偏移恰为 +8h（偏移为 0 直接判失败）—— `8e862f5`；去掉 `'localtime'` 后该用例与小时粒度用例双双变红，加回即绿。
+- 缺陷 4b（总览 200 路径无授权断言）：新增 `TestDashboardAllScopeReturnsOtherUsersRows`（scope=all 含他人、默认 self 不含、username 收窄只留被选用户）—— `8e862f5`；把 scope 判断改成无条件进入 `scope=all` 分支后该用例变红。
+- 缺陷 5（berry 两个全局默认项标签写成「新用户单日…上限」）：改为「单日 Token 上限（全局默认）」「单日额度上限（全局默认）」，与另两主题一致 —— `7fbbabb`；浏览器实测运营设置页读到新标签。
+- 缺陷 6（air 日志页「查询」把 click 事件当类型）：改为 `onClick={() => refresh(logType)}`，`htmlType='submit'` 保留（Semi Form 无条件自带 `preventDefault`，不会刷新整页）—— `7fbbabb`；浏览器实测选「消费」后点查询，请求为 `type=2`、列表无管理类行、页面级标记未丢失。
+- **本波未覆盖**：缺陷 2 只在「服务器 UTC + 浏览器 +08」这一种错配下实测（day 粒度与真正的 DST 错配未覆盖）；缺陷 3 的浏览器证据只做了 default 主题（三主题客户端代码同构且未改动，修在后端一处）；air 的 VChart 与 berry 的 ApexCharts 未做像素级判定。
+
