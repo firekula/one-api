@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Button, Form, Layout, Spin} from '@douyinfe/semi-ui';
+import {Button, DatePicker, Form, Layout, Select, Spin} from '@douyinfe/semi-ui';
 import VChart from '@visactor/vchart';
 import {API, isAdmin, showError, timestamp2string} from '../../helpers';
 import {
@@ -37,6 +37,11 @@ const initialFilters = () => ({
     token_name: '',
     model_name: ''
 });
+
+// 范围与用户是令牌候选值的上游：换范围/换用户后原来的令牌选择已经不在候选集里，
+// 属于真正有依赖关系的联动，必须一起清掉（不是可见性补丁）。
+const scopeChangePatch = (scope) => ({scope, username: '', token_name: ''});
+const usernameChangePatch = (username) => ({username, token_name: ''});
 
 // 候选值来自日志表：错误类型日志的 token_name / model_name 是空串，接口又不按日志类型过滤，
 // 不处理的话每个下拉框都会多出一个空白选项。统一剔除空白值并去重。
@@ -238,6 +243,28 @@ const createPieSpec = (values, subtext) => ({
 // 每个桶都补一行 0 值，柱状图的 x 轴才会覆盖整个请求区间（点数过多时退化成只画有数据的桶）
 const MAX_FILLED_POINTS = 4000;
 
+// 桶轴 = 请求区间算出的网格 ∪ 响应里实际回传的标签。
+// 网格是用浏览器本地日历算的，后端却是按服务器本地时间分桶，两者不一致时回传的标签
+// 可能整批落在网格之外；只认网格会把数据整批丢掉（小时粒度 + 不足一天时最明显：图表全空
+// 但日志明明存在）。两种标签（YYYY-MM-DD 与 YYYY-MM-DD HH:00）都是零填充，直接字典序排序即可。
+const buildBucketAxis = (grid, rows) => {
+    const merged = new Set(grid);
+    rows.forEach((row) => {
+        if (typeof row.Day === 'string' && row.Day !== '') {
+            merged.add(row.Day);
+        }
+    });
+    return [...merged].sort();
+};
+
+// 筛选栏里「标签 + 单个受控组件」的一格。控件直接读 filters，不再经过 Form.* 的 field 包装。
+const FilterItem = ({label, children}) => (
+    <div style={{display: 'inline-flex', alignItems: 'center', marginRight: 16, marginBottom: 12}}>
+        <Form.Label style={{marginRight: 8, whiteSpace: 'nowrap'}}>{label}</Form.Label>
+        {children}
+    </div>
+);
+
 const Dashboard = () => {
     const isAdminUser = isAdmin();
     const [filters, setFiltersState] = useState(initialFilters);
@@ -265,18 +292,16 @@ const Dashboard = () => {
 
     const applyData = useCallback((rows) => {
         createCharts();
-        const buckets = buildBuckets(filters.start_timestamp, filters.end_timestamp, filters.granularity);
-        const bucketSet = new Set(buckets);
-        // 桶之外的行（越界、或浏览器与服务器时区不一致）不参与出图，
-        // 否则 x 轴会出现请求区间之外的标签
-        const validRows = rows.filter((row) => bucketSet.has(row.Day));
-        const models = [...new Set(validRows.map((row) => row.ModelName))];
+        const grid = buildBuckets(filters.start_timestamp, filters.end_timestamp, filters.granularity);
+        // 不按标签相等丢弃行：网格只决定补 0 的骨架，响应里出现的标签一律并入 x 轴
+        const buckets = buildBucketAxis(grid, rows);
+        const models = [...new Set(rows.map((row) => row.ModelName))];
 
         let quotaSum = 0;
         let requestSum = 0;
         const modelCount = new Map();
         const barQuota = new Map();
-        validRows.forEach((row) => {
+        rows.forEach((row) => {
             quotaSum += row.Quota;
             requestSum += row.RequestCount;
             modelCount.set(row.ModelName, (modelCount.get(row.ModelName) || 0) + row.RequestCount);
@@ -316,7 +341,9 @@ const Dashboard = () => {
             );
             pieChartRef.current.reLayout();
         }
-        setHasData(validRows.length > 0);
+        // 空状态只看响应本身：响应非空但标签与网格不一致时，上面已经把标签并进 x 轴，
+        // 不能再报「暂无数据」
+        setHasData(rows.length > 0);
     }, [filters]);
 
     const loadDashboardData = useCallback(async () => {
@@ -414,85 +441,85 @@ const Dashboard = () => {
                     <h3>总览</h3>
                 </Layout.Header>
                 <Layout.Content>
-                    <Form layout='horizontal' style={{marginTop: 10}}>
-                        <>
-                            <Form.DatePicker field='start_timestamp' label='起始时间' style={{width: 272}}
-                                             type='dateTime'
-                                             value={filters.start_timestamp}
-                                             name='start_timestamp'
-                                             onChange={(date, dateString) => {
-                                                 if (dateString) {
-                                                     setFilters({start_timestamp: dateString});
-                                                 }
-                                             }}/>
-                            <Form.DatePicker field='end_timestamp' fluid label='结束时间' style={{width: 272}}
-                                             type='dateTime'
-                                             value={filters.end_timestamp}
-                                             name='end_timestamp'
-                                             onChange={(date, dateString) => {
-                                                 if (dateString) {
-                                                     setFilters({end_timestamp: dateString});
-                                                 }
-                                             }}/>
-                            <Form.Select field='granularity' label='时间粒度' style={{width: 176}}
-                                         value={filters.granularity}
-                                         placeholder={'时间粒度'} name='granularity'
-                                         optionList={
-                                             [
-                                                 {label: '小时', value: 'hour'},
-                                                 {label: '天', value: 'day'}
-                                             ]
-                                         }
-                                         onChange={(value) => setFilters({granularity: value})}/>
-                            {
-                                isAdminUser && <>
-                                    <Form.Select field='scope' label='数据范围' style={{width: 176}}
-                                                 value={filters.scope}
-                                                 placeholder={'数据范围'} name='scope'
-                                                 optionList={
-                                                     [
-                                                         {label: '仅自己', value: 'self'},
-                                                         {label: '全站', value: 'all'}
-                                                     ]
-                                                 }
-                                                 onChange={(value) => setFilters({
-                                                     scope: value,
-                                                     username: '',
-                                                     token_name: ''
-                                                 })}/>
-                                    {
-                                        filters.scope === 'all' && <>
-                                            <Form.Select field='username' label='用户名称' style={{width: 176}}
-                                                         value={filters.username}
-                                                         filter
-                                                         placeholder={'全部'} name='username'
-                                                         optionList={buildOptions(withSelected(candidates.users, filters.username))}
-                                                         onChange={(value) => setFilters({
-                                                             username: value,
-                                                             token_name: ''
-                                                         })}/>
-                                        </>
+                    {/* 筛选栏：控件一律直接受控于 filters。
+                        不用 Form.* 的 field 包装，是因为 withField 会用表单内部状态覆盖
+                        传入的 value 且不再回读 props —— 那样程序化清空筛选（切范围/切用户）
+                        只在 state 里生效，界面还显示着旧值，出现「看起来生效其实没生效」的筛选。 */}
+                    <div style={{marginTop: 10}}>
+                        <FilterItem label='起始时间'>
+                            <DatePicker type='dateTime' style={{width: 272}}
+                                        value={filters.start_timestamp}
+                                        onChange={(date, dateString) => {
+                                            if (dateString) {
+                                                setFilters({start_timestamp: dateString});
+                                            }
+                                        }}/>
+                        </FilterItem>
+                        <FilterItem label='结束时间'>
+                            <DatePicker type='dateTime' style={{width: 272}}
+                                        value={filters.end_timestamp}
+                                        onChange={(date, dateString) => {
+                                            if (dateString) {
+                                                setFilters({end_timestamp: dateString});
+                                            }
+                                        }}/>
+                        </FilterItem>
+                        <FilterItem label='时间粒度'>
+                            <Select style={{width: 176}}
+                                    value={filters.granularity}
+                                    optionList={
+                                        [
+                                            {label: '小时', value: 'hour'},
+                                            {label: '天', value: 'day'}
+                                        ]
                                     }
-                                </>
-                            }
-                            <Form.Select field='token_name' label='令牌名称' style={{width: 176}}
-                                         value={filters.token_name}
-                                         filter
-                                         placeholder={'全部'} name='token_name'
-                                         optionList={buildOptions(withSelected(candidates.tokens, filters.token_name))}
-                                         onChange={(value) => setFilters({token_name: value})}/>
-                            <Form.Select field='model_name' label='模型名称' style={{width: 176}}
-                                         value={filters.model_name}
-                                         filter
-                                         placeholder={'全部'} name='model_name'
-                                         optionList={buildOptions(withSelected(candidates.models, filters.model_name))}
-                                         onChange={(value) => setFilters({model_name: value})}/>
-                            <Form.Section>
-                                <Button label='查询' type="primary" htmlType="submit" className="btn-margin-right"
-                                        onClick={loadDashboardData} loading={loading}>查询</Button>
-                            </Form.Section>
-                        </>
-                    </Form>
+                                    onChange={(value) => setFilters({granularity: value})}/>
+                        </FilterItem>
+                        {
+                            isAdminUser && <>
+                                <FilterItem label='数据范围'>
+                                    <Select style={{width: 176}}
+                                            value={filters.scope}
+                                            optionList={
+                                                [
+                                                    {label: '仅自己', value: 'self'},
+                                                    {label: '全站', value: 'all'}
+                                                ]
+                                            }
+                                            onChange={(value) => setFilters(scopeChangePatch(value))}/>
+                                </FilterItem>
+                                {
+                                    filters.scope === 'all' &&
+                                    <FilterItem label='用户名称'>
+                                        <Select style={{width: 176}}
+                                                value={filters.username}
+                                                filter
+                                                placeholder={'全部'}
+                                                optionList={buildOptions(withSelected(candidates.users, filters.username))}
+                                                onChange={(value) => setFilters(usernameChangePatch(value))}/>
+                                    </FilterItem>
+                                }
+                            </>
+                        }
+                        <FilterItem label='令牌名称'>
+                            <Select style={{width: 176}}
+                                    value={filters.token_name}
+                                    filter
+                                    placeholder={'全部'}
+                                    optionList={buildOptions(withSelected(candidates.tokens, filters.token_name))}
+                                    onChange={(value) => setFilters({token_name: value})}/>
+                        </FilterItem>
+                        <FilterItem label='模型名称'>
+                            <Select style={{width: 176}}
+                                    value={filters.model_name}
+                                    filter
+                                    placeholder={'全部'}
+                                    optionList={buildOptions(withSelected(candidates.models, filters.model_name))}
+                                    onChange={(value) => setFilters({model_name: value})}/>
+                        </FilterItem>
+                        <Button label='查询' type="primary" className="btn-margin-right"
+                                onClick={loadDashboardData} loading={loading}>查询</Button>
+                    </div>
                     {
                         !loading && loaded && !hasData &&
                         <div style={{
