@@ -19,7 +19,11 @@ const EditUser = () => {
     email: '',
     quota: 0,
     group: 'default',
+    daily_token_limit: 0,
+    daily_quota_limit: 0,
   });
+  const [dailyTokenMode, setDailyTokenMode] = useState('follow');
+  const [dailyQuotaMode, setDailyQuotaMode] = useState('follow');
   const [groupOptions, setGroupOptions] = useState([]);
   const {
     username,
@@ -62,7 +66,25 @@ const EditUser = () => {
     const { success, message, data } = res.data;
     if (success) {
       data.password = '';
-      setInputs(data);
+      const dailyTokenMode =
+        data.daily_token_limit === null || data.daily_token_limit === 0
+          ? 'follow'
+          : data.daily_token_limit < 0
+          ? 'exempt'
+          : 'custom';
+      const dailyQuotaMode =
+        data.daily_quota_limit === null || data.daily_quota_limit === 0
+          ? 'follow'
+          : data.daily_quota_limit < 0
+          ? 'exempt'
+          : 'custom';
+      setInputs({
+        ...data,
+        daily_token_limit: Math.max(data.daily_token_limit || 0, 0),
+        daily_quota_limit: Math.max(data.daily_quota_limit || 0, 0),
+      });
+      setDailyTokenMode(dailyTokenMode);
+      setDailyQuotaMode(dailyQuotaMode);
     } else {
       showError(message);
     }
@@ -82,6 +104,19 @@ const EditUser = () => {
       if (typeof data.quota === 'string') {
         data.quota = parseInt(data.quota);
       }
+      // 三态编码：follow 必须显式发 0，发 null 会被后端 GORM 的零值跳过而改不回去
+      data.daily_token_limit =
+        dailyTokenMode === 'follow'
+          ? 0
+          : dailyTokenMode === 'exempt'
+          ? -1
+          : Math.max(parseInt(inputs.daily_token_limit) || 0, 1);
+      data.daily_quota_limit =
+        dailyQuotaMode === 'follow'
+          ? 0
+          : dailyQuotaMode === 'exempt'
+          ? -1
+          : Math.max(parseInt(inputs.daily_quota_limit) || 0, 1);
       res = await API.put(`/api/user/`, data);
     } else {
       res = await API.put(`/api/user/self`, inputs);
@@ -163,6 +198,77 @@ const EditUser = () => {
                     autoComplete='new-password'
                   />
                 </Form.Field>
+                <Form.Group widths='equal'>
+                  <Form.Select
+                    label={t('user.edit.daily_token_limit')}
+                    options={[
+                      {
+                        key: 'follow',
+                        text: t('user.edit.limit_mode_follow_global'),
+                        value: 'follow',
+                      },
+                      {
+                        key: 'exempt',
+                        text: t('user.edit.limit_mode_exempt'),
+                        value: 'exempt',
+                      },
+                      {
+                        key: 'custom',
+                        text: t('user.edit.limit_mode_custom'),
+                        value: 'custom',
+                      },
+                    ]}
+                    value={dailyTokenMode}
+                    onChange={(e, { value }) => setDailyTokenMode(value)}
+                  />
+                  {dailyTokenMode === 'custom' && (
+                    <Form.Input
+                      label={t('user.edit.daily_token_limit_value')}
+                      name='daily_token_limit'
+                      type='number'
+                      min='1'
+                      value={inputs.daily_token_limit}
+                      onChange={handleInputChange}
+                    />
+                  )}
+                </Form.Group>
+                <Form.Group widths='equal'>
+                  <Form.Select
+                    label={t('user.edit.daily_quota_limit')}
+                    options={[
+                      {
+                        key: 'follow',
+                        text: t('user.edit.limit_mode_follow_global'),
+                        value: 'follow',
+                      },
+                      {
+                        key: 'exempt',
+                        text: t('user.edit.limit_mode_exempt'),
+                        value: 'exempt',
+                      },
+                      {
+                        key: 'custom',
+                        text: t('user.edit.limit_mode_custom'),
+                        value: 'custom',
+                      },
+                    ]}
+                    value={dailyQuotaMode}
+                    onChange={(e, { value }) => setDailyQuotaMode(value)}
+                  />
+                  {dailyQuotaMode === 'custom' && (
+                    <Form.Input
+                      label={`${t('user.edit.daily_quota_limit_value')}${renderQuotaWithPrompt(
+                        inputs.daily_quota_limit,
+                        t
+                      )}`}
+                      name='daily_quota_limit'
+                      type='number'
+                      min='1'
+                      value={inputs.daily_quota_limit}
+                      onChange={handleInputChange}
+                    />
+                  )}
+                </Form.Group>
               </>
             )}
             <Form.Field>
