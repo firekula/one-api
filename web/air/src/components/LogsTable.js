@@ -16,6 +16,28 @@ function renderTimestamp(timestamp) {
 
 const MODE_OPTIONS = [{ key: 'all', text: '全部用户', value: 'all' }, { key: 'self', text: '当前用户', value: 'self' }];
 
+// 候选值来自日志表：错误类型日志的 token_name / model_name 是空串，接口又不按日志类型过滤，
+// 不处理的话每个下拉框都会多出一个空白选项。统一剔除空白值并去重。
+const sanitizeCandidates = (list) =>
+  Array.isArray(list)
+    ? [...new Set(list.filter((value) => typeof value === 'string' && value.trim() !== ''))]
+    : [];
+
+const EMPTY_CANDIDATES = { users: [], tokens: [], models: [] };
+
+// 候选值只覆盖所选区间与所选用户：管理员切换用户后，原先选中的令牌/模型可能已经不在候选里。
+// 空值代表不过滤（后端只对非空值追加条件），所以「全部」对应空值。
+const buildOptions = (list, allLabel = '全部') => [
+  { label: allLabel, value: '' },
+  ...list.map((value) => ({ label: value, value }))
+];
+
+// Semi 的 Select 对 optionList 里没有的值会退化显示原始字符串（select foundation 内部补一个
+// _notExist 选项），所以这里不会出现“筛选已生效但下拉框空白”。仍然把选中值补进列表，
+// 让它在展开的下拉里也保持可见、可点选。
+const withSelected = (list, selected) =>
+  selected && !list.includes(selected) ? [selected, ...list] : list;
+
 const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo', 'light-blue', 'lime', 'orange', 'pink', 'purple', 'red', 'teal', 'violet', 'yellow'];
 
 function renderType(type) {
@@ -166,8 +188,43 @@ const LogsTable = () => {
     quota: 0, token: 0
   });
 
+  const [candidates, setCandidates] = useState(EMPTY_CANDIDATES);
+
   const handleInputChange = (value, name) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
+  };
+
+  // 筛选下拉的候选值：取所选区间内日志里实际出现过的用户/令牌/模型。
+  // 非管理员后端会忽略 username，因此不提交（列表里本来也只有自己）。
+  const loadCandidates = async () => {
+    const localStartTimestamp = Date.parse(start_timestamp) / 1000;
+    const localEndTimestamp = Date.parse(end_timestamp) / 1000;
+    if (!Number.isFinite(localStartTimestamp) || !Number.isFinite(localEndTimestamp)) {
+      return;
+    }
+    try {
+      const res = await API.get('/api/log/filters', {
+        params: {
+          start_timestamp: localStartTimestamp,
+          end_timestamp: localEndTimestamp,
+          username: isAdminUser ? username : ''
+        }
+      });
+      const { success, data } = res.data;
+      if (!success) {
+        setCandidates(EMPTY_CANDIDATES);
+        return;
+      }
+      const result = data || {};
+      setCandidates({
+        users: sanitizeCandidates(result.users),
+        tokens: sanitizeCandidates(result.tokens),
+        models: sanitizeCandidates(result.models)
+      });
+    } catch (error) {
+      // 候选值拉取失败不能阻塞日志列表，退化成只有「全部」可选
+      setCandidates(EMPTY_CANDIDATES);
+    }
   };
 
   const getLogSelfStat = async () => {
@@ -311,6 +368,12 @@ const LogsTable = () => {
       });
   }, []);
 
+  // 令牌/模型候选值取决于区间与管理员所选的用户：换用户或换区间都要重新拉取。
+  // 非管理员不提交 username，所以也不作为依赖（Username 控件本身也只有管理员可见）。
+  useEffect(() => {
+    loadCandidates().then();
+  }, [start_timestamp, end_timestamp, username]);
+
   const searchLogs = async () => {
     if (searchKeyword === '') {
       // if keyword is blank, load files instead.
@@ -344,11 +407,19 @@ const LogsTable = () => {
       </Header>
       <Form layout="horizontal" style={{ marginTop: 10 }}>
         <>
-          <Form.Input field="token_name" label="令牌名称" style={{ width: 176 }} value={token_name}
-            placeholder={'可选值'} name="token_name"
+          {/* 三个下拉的取值一律经 handleInputChange(value, name) 写回 inputs —— 与下方
+              loadLogs / getLogStat 读取的字段完全一致，因此选择即筛选。
+              空值即不筛选（后端只对非空值追加条件），「全部」和空状态都显示为「全部」。
+              注意：Form.* 组件被 withField 包装，value 由表单内部状态持有（初值用 initValue），
+              传入的 value prop 会被忽略；本文件没有程序化改写这些筛选，所以两者始终同步。 */}
+          <Form.Select field="token_name" label="令牌名称" style={{ width: 176 }} filter
+            initValue={''} placeholder={'全部'}
+            optionList={buildOptions(withSelected(candidates.tokens, token_name))}
+            name="token_name"
             onChange={value => handleInputChange(value, 'token_name')} />
-          <Form.Input field="model_name" label="模型名称" style={{ width: 176 }} value={model_name}
-            placeholder="可选值"
+          <Form.Select field="model_name" label="模型名称" style={{ width: 176 }} filter
+            initValue={''} placeholder={'全部'}
+            optionList={buildOptions(withSelected(candidates.models, model_name))}
             name="model_name"
             onChange={value => handleInputChange(value, 'model_name')} />
           <Form.DatePicker field="start_timestamp" label="起始时间" style={{ width: 272 }}
@@ -365,8 +436,10 @@ const LogsTable = () => {
             <Form.Input field="channel" label="渠道 ID" style={{ width: 176 }} value={channel}
               placeholder="可选值" name="channel"
               onChange={value => handleInputChange(value, 'channel')} />
-            <Form.Input field="username" label="用户名称" style={{ width: 176 }} value={username}
-              placeholder={'可选值'} name="username"
+            <Form.Select field="username" label="用户名称" style={{ width: 176 }} filter
+              initValue={''} placeholder={'全部'}
+              optionList={buildOptions(withSelected(candidates.users, username))}
+              name="username"
               onChange={value => handleInputChange(value, 'username')} />
           </>}
           <Form.Section>
