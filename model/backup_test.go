@@ -27,6 +27,13 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	oldDB := DB
 	DB = db
 	t.Cleanup(func() { DB = oldDB })
+	// Windows 上必须先释放 sqlite 文件句柄，否则 t.TempDir 的清理会报
+	// "The process cannot access the file because it is being used by another process"
+	// 而把整个包判为 FAIL（Linux 允许删除已打开的文件，所以只在 Windows 暴露）。
+	// t.Cleanup 是 LIFO：这里在 TempDir 的清理之后注册，因此会先执行。
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 	return db
 }
 
