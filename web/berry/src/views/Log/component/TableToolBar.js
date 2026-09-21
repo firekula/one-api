@@ -1,11 +1,6 @@
 import PropTypes from "prop-types";
 import { useTheme } from "@mui/material/styles";
-import {
-  IconUser,
-  IconKey,
-  IconBrandGithubCopilot,
-  IconSitemap,
-} from "@tabler/icons-react";
+import { IconSitemap } from "@tabler/icons-react";
 import {
   InputAdornment,
   OutlinedInput,
@@ -22,10 +17,20 @@ import LogType from "../type/LogType";
 require("dayjs/locale/zh-cn");
 // ----------------------------------------------------------------------
 
+const EMPTY_CANDIDATES = { users: [], tokens: [], models: [] };
+
+// 候选值会随用户名/区间变化收窄，已选中的值可能不在新列表里。MUI Select 遇到不在
+// 选项中的值会显示成空白但筛选依然生效，所以把已选中的值保留为额外选项。
+const withSelected = (list, selected) => {
+  const items = Array.isArray(list) ? list : [];
+  return selected && !items.includes(selected) ? [selected, ...items] : items;
+};
+
 export default function TableToolBar({
   filterName,
   handleFilterName,
   userIsAdmin,
+  candidates = EMPTY_CANDIDATES,
 }) {
   const theme = useTheme();
   const grey500 = theme.palette.grey[500];
@@ -38,47 +43,63 @@ export default function TableToolBar({
         padding={"24px"}
         paddingBottom={"0px"}
       >
-        <FormControl>
-          <InputLabel htmlFor="channel-token_name-label">令牌名称</InputLabel>
-          <OutlinedInput
-            id="token_name"
+        <FormControl sx={{ minWidth: 160 }}>
+          <InputLabel htmlFor="token_name-label">令牌名称</InputLabel>
+          <Select
+            id="token_name-label"
             name="token_name"
-            sx={{
-              minWidth: "100%",
-            }}
             label="令牌名称"
             value={filterName.token_name}
             onChange={handleFilterName}
-            placeholder="令牌名称"
-            startAdornment={
-              <InputAdornment position="start">
-                <IconKey stroke={1.5} size="20px" color={grey500} />
-              </InputAdornment>
-            }
-          />
-        </FormControl>
-        <FormControl>
-          <InputLabel htmlFor="channel-model_name-label">模型名称</InputLabel>
-          <OutlinedInput
-            id="model_name"
-            name="model_name"
             sx={{
               minWidth: "100%",
             }}
+            MenuProps={{
+              PaperProps: {
+                style: {
+                  maxHeight: 200,
+                },
+              },
+            }}
+          >
+            <MenuItem value="">全部</MenuItem>
+            {withSelected(candidates.tokens, filterName.token_name).map(
+              (name) => (
+                <MenuItem key={name} value={name}>
+                  {name}
+                </MenuItem>
+              )
+            )}
+          </Select>
+        </FormControl>
+        <FormControl sx={{ minWidth: 160 }}>
+          <InputLabel htmlFor="model_name-label">模型名称</InputLabel>
+          <Select
+            id="model_name-label"
+            name="model_name"
             label="模型名称"
             value={filterName.model_name}
             onChange={handleFilterName}
-            placeholder="模型名称"
-            startAdornment={
-              <InputAdornment position="start">
-                <IconBrandGithubCopilot
-                  stroke={1.5}
-                  size="20px"
-                  color={grey500}
-                />
-              </InputAdornment>
-            }
-          />
+            sx={{
+              minWidth: "100%",
+            }}
+            MenuProps={{
+              PaperProps: {
+                style: {
+                  maxHeight: 200,
+                },
+              },
+            }}
+          >
+            <MenuItem value="">全部</MenuItem>
+            {withSelected(candidates.models, filterName.model_name).map(
+              (name) => (
+                <MenuItem key={name} value={name}>
+                  {name}
+                </MenuItem>
+              )
+            )}
+          </Select>
         </FormControl>
 
         <FormControl>
@@ -178,24 +199,34 @@ export default function TableToolBar({
         )}
 
         {userIsAdmin && (
-          <FormControl>
-            <InputLabel htmlFor="channel-username-label">用户名称</InputLabel>
-            <OutlinedInput
-              id="username"
+          <FormControl sx={{ minWidth: 160 }}>
+            <InputLabel htmlFor="username-label">用户名称</InputLabel>
+            <Select
+              id="username-label"
               name="username"
-              sx={{
-                minWidth: "100%",
-              }}
               label="用户名称"
               value={filterName.username}
               onChange={handleFilterName}
-              placeholder="用户名称"
-              startAdornment={
-                <InputAdornment position="start">
-                  <IconUser stroke={1.5} size="20px" color={grey500} />
-                </InputAdornment>
-              }
-            />
+              sx={{
+                minWidth: "100%",
+              }}
+              MenuProps={{
+                PaperProps: {
+                  style: {
+                    maxHeight: 200,
+                  },
+                },
+              }}
+            >
+              <MenuItem value="">全部</MenuItem>
+              {withSelected(candidates.users, filterName.username).map(
+                (name) => (
+                  <MenuItem key={name} value={name}>
+                    {name}
+                  </MenuItem>
+                )
+              )}
+            </Select>
           </FormControl>
         )}
 
@@ -236,4 +267,9 @@ TableToolBar.propTypes = {
   filterName: PropTypes.object,
   handleFilterName: PropTypes.func,
   userIsAdmin: PropTypes.bool,
+  candidates: PropTypes.shape({
+    users: PropTypes.array,
+    tokens: PropTypes.array,
+    models: PropTypes.array,
+  }),
 };

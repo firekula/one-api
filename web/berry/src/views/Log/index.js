@@ -19,6 +19,13 @@ import { isAdmin } from 'utils/common';
 import { ITEMS_PER_PAGE } from 'constants';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 
+// 候选值来自日志表：错误类型日志的 token_name / model_name 可能是空串，
+// 直接渲染会出现一个空白选项，这里统一剔除空白值并去重。
+const sanitizeCandidates = (list) =>
+  Array.isArray(list) ? [...new Set(list.filter((value) => typeof value === 'string' && value.trim() !== ''))] : [];
+
+const EMPTY_CANDIDATES = { users: [], tokens: [], models: [] };
+
 export default function Log() {
   const originalKeyword = {
     p: 0,
@@ -35,7 +42,37 @@ export default function Log() {
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState(originalKeyword);
   const [initPage, setInitPage] = useState(true);
+  const [candidates, setCandidates] = useState(EMPTY_CANDIDATES);
   const userIsAdmin = isAdmin();
+
+  // 筛选下拉的候选值：取所选区间内日志里实际出现过的用户/令牌/模型。
+  // 空值代表不过滤（后端只对非空值追加条件），所以非管理员不提交 username。
+  const loadCandidates = async () => {
+    try {
+      const params = {
+        start_timestamp: searchKeyword.start_timestamp,
+        end_timestamp: searchKeyword.end_timestamp
+      };
+      if (userIsAdmin) {
+        params.username = searchKeyword.username;
+      }
+      const res = await API.get('/api/log/filters', { params });
+      const { success, data } = res.data;
+      if (success) {
+        const result = data || {};
+        setCandidates({
+          users: sanitizeCandidates(result.users),
+          tokens: sanitizeCandidates(result.tokens),
+          models: sanitizeCandidates(result.models)
+        });
+      } else {
+        setCandidates(EMPTY_CANDIDATES);
+      }
+    } catch (error) {
+      // 候选值拉取失败不能阻塞日志列表，退化成只有「全部」可选的空列表
+      setCandidates(EMPTY_CANDIDATES);
+    }
+  };
 
   const loadLogs = async (startIdx) => {
     setSearching(true);
@@ -100,6 +137,12 @@ export default function Log() {
     setInitPage(false);
   }, [initPage]);
 
+  // 用户名变化时令牌/模型候选值要跟着收窄，区间变化时同样要重新拉取；
+  // 非管理员不提交 username（loadLogs 会从查询条件里删掉它），因此也不作为依赖。
+  useEffect(() => {
+    loadCandidates().then();
+  }, [searchKeyword.start_timestamp, searchKeyword.end_timestamp, userIsAdmin ? searchKeyword.username : '']);
+
   return (
     <>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
@@ -107,7 +150,12 @@ export default function Log() {
       </Stack>
       <Card>
         <Box component="form" onSubmit={searchLogs} noValidate sx={{marginTop: 2}}>
-          <TableToolBar filterName={searchKeyword} handleFilterName={handleSearchKeyword} userIsAdmin={userIsAdmin} />
+          <TableToolBar
+            filterName={searchKeyword}
+            handleFilterName={handleSearchKeyword}
+            userIsAdmin={userIsAdmin}
+            candidates={candidates}
+          />
         </Box>
         <Toolbar
           sx={{
