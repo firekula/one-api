@@ -5,10 +5,11 @@
 
 ## 背景与目标
 
-两个面向"日常管理 + 复盘"的需求：
+三个面向"日常管理 + 复盘"的需求：
 
 1. **单日用量上限**：给所有用户加单日用量天花板，防止个别账号（或 key 泄露）在一天内把整站额度/上游配额烧穿；管理员可对个别用户豁免或设置单独数值。
 2. **总览筛选**：现有总览（`/dashboard`）只能看最近 7 天，且只能看自己，无法按时间段、用户、令牌、模型复盘。
+3. **日志页按用户/令牌筛选**：日志页已有「用户名称」「令牌名称」两个筛选框，但都是需要手打精确值的文本框；改成可从实际值中选择的下拉，并与总览筛选共用同一套候选值。
 
 改动前先澄清了一个事实：`/api/user/dashboard` 把 `user_id` 硬编码为**当前登录会话**（`controller/user.go:262-268` → `model/log.go:225-251` 的 `AND user_id = ?`），链路上没有任何按角色分支。因此管理员在总览看到的数字是**自己账号的消耗**，不是全站。全站视图目前只存在于日志页（`/api/log/*`，`AdminAuth`），且只有明细/总额，没有"按天 × 模型"的分组图。
 
@@ -23,6 +24,7 @@
 | air 的坏页面 | 修好并改造为 air 的"总览"页面 |
 | 用户列表响应 | 允许改动，增加"今日用量"字段 |
 | 图片请求 | 不纳入 token 上限，只受额度上限约束 |
+| 日志页用户/令牌筛选 | 改为下拉选择，候选值取自日志里实际出现过的值（**用户未答复，按此假设推进**，见第三部分） |
 
 ## 范围
 
@@ -33,6 +35,7 @@
 - 四个请求模态（文本/Anthropic/Audio/Image）的准入判定与结算记账
 - `/api/user/dashboard` 扩展时间段、粒度、范围与三个筛选维度
 - 三个主题的总览筛选栏、用户编辑表单、运营设置项、用户列表用量展示
+- 三个主题日志页的用户/令牌筛选改为下拉，并新增日志候选值接口
 - 顺带修复 6 个既有缺陷（见"顺带修复的既有缺陷"）
 
 ### 排除
@@ -40,7 +43,8 @@
 - 按令牌维度的单日上限（本次只按用户；`logs.token_name` 已具备，后续可加）
 - 上限预警（邮件/站内信）
 - 周粒度的分桶聚合
-- 日志表 DISTINCT 候选值接口（筛选先用精确匹配文本）
+- 日志页「渠道 ID」筛选维持文本框（管理员使用，习惯按 ID 查，且渠道数量有限）
+- 给 `logs` 表补 `token_id` 列以支持按令牌 ID（而非名称）过滤
 
 ## 第一部分：单日用量上限
 
@@ -239,11 +243,11 @@ SQL 侧三个方言都按**服务器本地时间**分桶：
 
 ### 各主题前端改动
 
-三套主题互不复用代码，各自实现筛选栏；三个筛选维度统一用**精确匹配文本输入**，与各主题日志页现有做法一致（带候选值的下拉需要新增按日志 DISTINCT 的接口，本次不做）。
+三套主题互不复用代码，各自实现筛选栏；三个筛选维度都用**下拉选择**，候选值与日志页共用第三部分的 `/api/log/filters`。总览仍把 `username`/`token_name`/`model_name` 作为精确匹配传给 `/api/user/dashboard`，接口契约不变。
 
 **default**（recharts + semantic-ui-react，无日期库，日志页的做法是原生输入）：
 
-- 在 `dashboard-container` 内、图表之上插入筛选栏：快捷区间按钮（今天 / 近 7 天 / 近 30 天）+ 两个 `<input type='date'>` + 管理员"全站 / 仅自己"切换 + 用户/令牌/模型文本输入 + 查询按钮。
+- 在 `dashboard-container` 内、图表之上插入筛选栏：快捷区间按钮（今天 / 近 7 天 / 近 30 天）+ 两个 `<input type='date'>` + 管理员"全站 / 仅自己"切换 + 用户/令牌/模型下拉 + 查询按钮。
 - 筛选状态进入 `useEffect` 依赖，触发重新拉取。
 - 删除 `processTimeSeriesData`/`processModelData` 里写死的 `sevenDaysAgo` 逻辑，改为按请求区间与粒度生成桶、对缺失桶补零。
 - `formatDate` 支持 `YYYY-MM-DD HH:00` 形式的标签。
@@ -256,7 +260,7 @@ SQL 侧三个方言都按**服务器本地时间**分桶：
 **air**（Semi UI + 命令式 `@visactor/vchart`，当前无可用总览）：
 
 - 把死页面 `pages/Detail` 改造为 `pages/Dashboard`（路由 `/dashboard`），`App.js` 注册 `<Route>`，`SiderBar.js` 加"总览"菜单项并更新 `routerMap`，**去掉永不成立的 `enable_data_export` 门控**。
-- 筛选栏用已有的 `Form.DatePicker` + 时间粒度选择（小时 / 天，去掉原来无效的"周"）+ 管理员用户名/令牌名/模型名输入 + 全站/仅自己切换。
+- 筛选栏用已有的 `Form.DatePicker` + 时间粒度选择（小时 / 天，去掉原来无效的"周"）+ 管理员用户名下拉与令牌名/模型名下拉 + 全站/仅自己切换。
 - 图表从"仅首次 mount 用 `new VChart(spec, {dom})` 建图"改为筛选变化时 `updateSpec` + `reLayout`。
 
 ### 用户列表增强
@@ -274,6 +278,67 @@ type UserListItem struct {
 ```
 
 `GetAllUsers` 取到当页用户后，用一次 `GetDailyUsages(ids, Today())` 填这四个字段（每页一次查询，不是每行一次）。`effective_*` 为 0 表示不限。三套主题的用户表格在"统计信息"列展示"今日 1.2M / 5M"。
+
+## 第三部分：日志页按用户/令牌筛选
+
+### 现状核对
+
+三个主题的日志页**已经有**这两个筛选框，但都需要手打精确值：
+
+| 主题 | 令牌筛选 | 用户筛选 |
+|---|---|---|
+| default | `components/LogsTable.js:330-336` 文本框 | `components/LogsTable.js:391-400` 文本框，仅管理员可见 |
+| berry | `views/Log/component/TableToolBar.js:45-49` 文本框 | 同文件 `185-189` 文本框，仅管理员可见 |
+| air | `components/LogsTable.js:347` 文本框 | 同文件 `368` 文本框，仅管理员可见 |
+
+后端两侧都已支持：全站查询 `GetAllLogs`（`controller/log.go:12-38`）接受 `username`/`token_name`/`model_name`/`channel`/时间区间的任意组合；自助查询 `GetUserLogs`（`controller/log.go:40-64`）支持 `token_name`/`model_name`，`user_id` 取自会话。
+
+所以本次要做的**不是从无到有**，而是把输入方式从"手打名称"变为"从候选值里选"，并让日志页与总览共用同一套候选值。
+
+**两个必须先知道的数据约束：**
+
+1. `logs` 表有 `user_id`，但**没有** `token_id`（`model/log.go:15-32`）。令牌只能按 `token_name` 过滤。给 `logs` 补 `token_id` 未纳入本次：历史行无法可靠回填（令牌名不唯一，无法确定旧日志属于哪个令牌）。
+2. `username` 与 `token_name` 都是**写入时冗余存储的名称快照**（`model.RecordConsumeLog` 里 `Username = GetUsernameById(...)`）。用户或令牌改名后，历史日志仍保留旧名。因此候选值取自**日志本身**而非当前的用户表/令牌表：好处是改名前的记录仍能被正确筛出来，代价是同一个用户/令牌改名后会以两个候选值出现。这在"复盘"语义下是更诚实的行为，需要在用户手册中写明。
+
+### 候选值接口（新增）
+
+```
+GET /api/log/filters
+鉴权：UserAuth（非管理员按自己收窄，管理员为全站）
+参数：start_timestamp、end_timestamp（unix 秒，可选；前端总是带上当前区间）
+      username（可选，仅管理员生效；用于把令牌候选值收窄到某个用户）
+响应：{success, message, data: {users: [...], tokens: [...], models: [...]}}
+```
+
+| 字段 | 非管理员 | 管理员 |
+|---|---|---|
+| `users` | 空数组（该筛选框对非管理员隐藏） | 所选区间内日志中出现过的 `username` 去重 |
+| `tokens` | 自己日志中出现过的 `token_name` 去重 | 全站 `token_name` 去重；传了 `username` 则收窄到该用户 |
+| `models` | 自己日志中出现过的 `model_name` 去重 | 全站 `model_name` 去重 |
+
+- 三个列表都按字符串排序、各 `LIMIT 500`，超出即截断（下拉不分页）。截断时打一条日志级告警，便于排查。
+- **不按 `type` 过滤**：候选值应当是"日志里真实出现过的值"，与日志列表默认（全部类型）的视图一致。
+- 实现：`model.SearchLogDistinctValues(userId int, username string, startTimestamp, endTimestamp int64, field string, limit int) ([]string, error)`，内部 `Distinct(field)` + 条件 `Where`；`field` 由调用方从固定白名单（`username`/`token_name`/`model_name`）取值，不做自由字符串拼接。
+
+### 性能
+
+`token_name`、`model_name` 都有可用索引；`username` 只有复合索引 `index_username_model_name`，而它的首列是 `model_name`（`model/log.go:23-24`），单独 `DISTINCT username` 用不上，实际是一次范围扫描后去重。因此：
+
+- 前端必须带上时间区间（日志页本来就有默认区间），把扫描限制在 `idx_created_at_type` 的时间范围内。
+- `LIMIT 500` 兜底。
+- 若实测在大日志量下偏慢，后续再补 `(username)` 单列索引——本次不加，避免为一个下拉增加写路径的索引维护成本。
+
+### 各主题前端改动
+
+- **default**：`LogsTable.js` 把令牌框（330-336）与用户名框（391-400）换成 `Form.Select`，候选值来自 `/api/log/filters`；用户名选择变化时带 `username` 重新拉取以收窄令牌下拉；两处都加「全部」选项用于清除。模型框（338-347）也一并换成下拉——候选值接口已经返回，留着文本框会与相邻的两个下拉不一致。
+- **berry**：`TableToolBar.js` 的 `token_name`（45-49）与 `username`（185-189）换成 MUI `Select`（同文件 204 行已有 `Select` 用法可参照）；候选值状态由 `views/Log/index.js` 持有并透传，沿用现有 `filterName`/`handleFilterName` 模式。
+- **air**：`components/LogsTable.js` 的令牌框（347）与用户名框（368）换成 `Form.Select`（`pages/Detail` 里已有 `Form.Select` 用法可参照）；模型框（350）同样换成下拉。
+
+候选值拉取时机：首次加载、时间区间变化、用户选择变化（用于收窄令牌）。拉取失败时退化为空列表并保留「全部」，不阻塞日志列表本身的加载。
+
+### 与总览的关系
+
+总览的第二部分改用同一套下拉（见"各主题前端改动"），接口契约不变——总览仍把 `username`/`token_name`/`model_name` 作为精确匹配传给 `/api/user/dashboard`。两处共用一个候选值接口，交互一致。
 
 ## 顺带修复的既有缺陷
 
@@ -298,8 +363,10 @@ type UserListItem struct {
 | `model/user.go` | 两个 `*int64` 字段 + `EffectiveDailyTokenLimit`/`EffectiveDailyQuotaLimit` |
 | `model/daily_usage.go` | **新增**：模型、`Today`、`GetDailyUsage`、`RecordDailyUsage`、`CheckUserDailyLimit`、`GetDailyUsages`、`DailyLimitError` |
 | `model/main.go` | `migrateDB` 加 `AutoMigrate(&DailyUsage{})` |
-| `model/log.go` | `LogStatisticQuery` + 重写 `SearchLogsByDayAndModel`（区间/粒度/三维筛选/本地时区分桶） |
+| `model/log.go` | `LogStatisticQuery` + 重写 `SearchLogsByDayAndModel`（区间/粒度/三维筛选/本地时区分桶）；新增 `SearchLogDistinctValues` |
 | `controller/user.go` | `GetUserDashboard` 参数解析与权限校验；`UpdateUser` 的新字段校验；`UserListItem` DTO + `GetAllUsers` 填充今日用量 |
+| `controller/log.go` | 新增 `GetLogFilters`（角色相关的候选值返回，管理员按 `username` 收窄令牌） |
+| `router/api.go` | 新增 `GET /api/log/filters`（`middleware.UserAuth()`） |
 | `relay/controller/helper.go` | 准入判定 + 结算记账（文本/chat） |
 | `relay/controller/anthropic.go` | 准入判定 + 结算记账 |
 | `relay/controller/audio.go` | 准入判定 + 结算记账（仅 quota） |
@@ -310,27 +377,28 @@ type UserListItem struct {
 
 | 主题 | 文件 |
 |---|---|
-| default | `src/pages/Dashboard/index.js`、`Dashboard.css`、`src/pages/User/EditUser.js`、`src/components/UsersTable.js`、`src/components/OperationSetting.js`、`src/locales/zh|en/translation.json` |
-| berry | `src/views/Dashboard/index.js`、`src/utils/chart.js`、`src/views/User/component/EditModal.js`、`src/views/User/TableRow.js`、`src/views/Setting/component/OperationSetting.js` |
-| air | `src/pages/Detail/*` → `src/pages/Dashboard/*`、`src/App.js`、`src/components/SiderBar.js`、`src/pages/User/EditUser.js`、`src/components/UsersTable.js`、`src/components/OperationSetting.js` |
+| default | `src/pages/Dashboard/index.js`、`Dashboard.css`、`src/components/LogsTable.js`、`src/pages/User/EditUser.js`、`src/components/UsersTable.js`、`src/components/OperationSetting.js`、`src/locales/zh/translation.json`、`src/locales/en/translation.json` |
+| berry | `src/views/Dashboard/index.js`、`src/utils/chart.js`、`src/views/Log/index.js`、`src/views/Log/component/TableToolBar.js`、`src/views/User/component/EditModal.js`、`src/views/User/TableRow.js`、`src/views/Setting/component/OperationSetting.js` |
+| air | `src/pages/Detail/*` → `src/pages/Dashboard/*`、`src/App.js`、`src/components/SiderBar.js`、`src/components/LogsTable.js`、`src/pages/User/EditUser.js`、`src/components/UsersTable.js`、`src/components/OperationSetting.js` |
 
-文案：default/berry 的总览筛选栏与用户编辑表单走 i18n（新增 `dashboard.filters.*`、`user.edit.daily_*`、`setting.operation.quota.daily_*`、`user.table.today_usage`，`zh`/`en` 两份同步）；air 沿用该主题现状的硬编码中文。
+文案：default/berry 的总览与日志筛选栏、用户编辑表单走 i18n（新增 `dashboard.filters.*`、`log.filter.*`、`user.edit.daily_*`、`setting.operation.quota.daily_*`、`user.table.today_usage`，`zh`/`en` 两份同步）；air 沿用该主题现状的硬编码中文。
 
 ### 文档
 
-- `docs/getting-started/user-manual.md`："额度规则"下新增"单日用量上限"小节（三态语义、0 表示不限、豁免、仅约束 `/v1` 转发流量、跨天重置）。
+- `docs/getting-started/user-manual.md`："额度规则"下新增"单日用量上限"小节（三态语义、0 表示不限、豁免、仅约束 `/v1` 转发流量、跨天重置）；日志章节补一句"按用户/令牌筛选的候选值来自日志里出现过的名称，用户或令牌改名后旧名会作为独立候选值保留"。
+- `docs/getting-started/configuration.md`：若该文件列举运营设置项则补充两个新选项（目前该文件是环境变量参考，本次不新增环境变量）。
 - `docs/getting-started/configuration.md`：若该文件列举运营设置项则补充两个新选项（目前该文件是环境变量参考，本次不新增环境变量）。
 
 ## 实施顺序
 
-两个功能彼此独立，但都依赖后端先行。按四阶段推进，每阶段结束都能独立验证：
+三个需求彼此独立，但都依赖后端先行。按四阶段推进，每阶段结束都能独立验证：
 
 1. **后端：日限**（`daily_usage` 表 + User 字段 + 全局选项 + 四个模态的判定与记账）。验证：model 层测试通过，手工设小上限确认拦截生效。
-2. **后端：总览查询**（`LogStatisticQuery` + 重写查询 + `/api/user/dashboard` 参数与权限 + `UserListItem`）。验证：分桶/筛选测试通过，`curl` 带参数确认返回正确。
-3. **前端：default 主题**（筛选栏 + 用户编辑 + 运营设置 + 用户列表用量）。default 是你当前使用的主题，先把交互跑通。
+2. **后端：总览查询与候选值接口**（`LogStatisticQuery` + 重写查询 + `/api/user/dashboard` 参数与权限 + `UserListItem` + `SearchLogDistinctValues` + `/api/log/filters`）。验证：分桶/筛选/候选值测试通过，`curl` 带参数确认返回正确。
+3. **前端：default 主题**（总览筛选栏 + 日志页用户/令牌下拉 + 用户编辑 + 运营设置 + 用户列表用量）。default 是你当前使用的主题，先把交互跑通。
 4. **前端：berry 与 air 主题**（各自实现同样的交互，air 含死页面改造）。
 
-第 1、2 阶段无共同改动面，可并行；第 3、4 阶段依赖各自阶段确定下来的接口契约（本文件已冻结）。
+第 1、2 阶段无共同改动面，可并行；第 3、4 阶段依赖前两阶段冻结的接口契约（本文件已冻结）。
 
 ## 测试与验证
 
@@ -343,10 +411,12 @@ type UserListItem struct {
    - hour 粒度分桶标签格式
    - `username`/`token_name`/`model_name` 过滤生效
    - `UserId = 0` 时返回全部用户（全站视图的基础）
+   - `SearchLogDistinctValues`：三个字段各自的去重结果、`username` 收窄令牌候选值、`LIMIT` 截断行为、非白名单 `field` 被拒
 3. **controller 层**（`httptest`，仿 `controller/data_test.go`）
    - `scope=all` 非管理员 → 403
    - `start > end` → 400
    - hour 粒度超长区间 → 400
+   - `/api/log/filters` 非管理员拿不到 `users`、只看到自己的 `tokens`/`models`；管理员拿得到全站 `users`，且传 `username` 后 `tokens` 收窄
 4. **构建**：`go test ./...` 与 `go build -o one-api .` 通过；三套主题分别 `npm run build` 通过（`web/build/` 被 gitignore，产物不入库）
 5. **手工验收**（`CGO_ENABLED=1 go run .`，SQLite）
    - 把某用户 `daily_token_limit` 设为 100，第一次请求成功、第二次被拒，错误码与消息正确，`daily_usage` 行数值与实际用量一致
@@ -359,14 +429,17 @@ type UserListItem struct {
 - **并发在途请求**可轻微超限（多个请求同时通过准入）。超出量以在途请求数为界。
 - **时区耦合**：按天分桶要求应用进程时区与数据库会话时区一致。多节点部署若各节点时区不一致，分桶会偏移。已在文档与注释中写明该前提。
 - **每请求额外两次 DB 访问**（一次点查 + 一次 upsert），不做 Redis 缓存。先保证正确性；若量级成为问题，可在 `CheckUserDailyLimit` 前加 Redis 计数器并把 DB 作为事实来源。
-- **用户/令牌/模型筛选是精确匹配文本**，没有候选值下拉，输入需要与日志里记录的值完全一致。
+- **筛选是精确匹配，不是模糊匹配**：下拉选中的值原样传给后端做等值匹配。候选值来自日志，因此不会出现"库里有但选不到"的情况；但仍不支持 `like` 查询（与现有日志页行为一致）。
+- **改名会让候选值分裂**：用户或令牌改名后，历史日志保留旧名，下拉里会同时出现新旧两个值，各自筛出自己那段历史。这是按日志名称快照过滤的必然结果，也是"复盘"想要的语义，需要在手册里说明。
+- **`DISTINCT username` 用不上现有索引**：复合索引 `index_username_model_name` 首列是 `model_name`，所以该查询是一次时间范围扫描 + 去重。靠"必须带时间区间 + `LIMIT 500`"控制成本；日志量极大时若成为瓶颈，再补单列索引。
+- **令牌筛选只能按名称**：`logs` 没有 `token_id`，同名的不同令牌无法区分（重名令牌会被合并筛选）。
 - **豁免只针对本功能**：豁免用户仍受账户余额与令牌额度限制，上限是额外的一层约束。
 - **仅约束 `/v1` 转发流量**：管理后台操作、导出等不消耗 token，因此不受上限影响（也意味着管理员不会把自己锁在后台之外）。
 
 ## 明确不做（YAGNI）
 
 - 周粒度分桶聚合
-- 日志表 DISTINCT 候选值接口与下拉筛选
+- 候选值下拉的分页或搜索（`LIMIT 500` 截断后需靠缩小区间来找）
 - 上限预警（邮件/站内信）与总览上的"今日用量/上限"进度条（`daily_usage` 已让这两项随时可加）
 - 按令牌维度的单日上限
 - 总览数据导出
