@@ -299,3 +299,38 @@ func SearchLogsByDayAndModel(query LogStatisticQuery) (LogStatistics []*LogStati
 	err = LOG_DB.Raw(sql, args...).Scan(&LogStatistics).Error
 	return LogStatistics, err
 }
+
+// logDistinctFields 是允许作为候选值维度查询的列白名单，避免调用方拼接任意列名。
+var logDistinctFields = map[string]bool{
+	"username":   true,
+	"token_name": true,
+	"model_name": true,
+}
+
+// SearchLogDistinctValues 返回某时间区间内日志里实际出现过的去重取值，用于筛选下拉候选值。
+// userId 为 0 表示不限用户；username 非空时会进一步收窄（用于列出某用户的令牌）。
+// 不按 type 过滤：候选值应当与日志列表默认（全部类型）的视图一致。
+func SearchLogDistinctValues(userId int, username string, startTimestamp, endTimestamp int64, field string, limit int) ([]string, error) {
+	if !logDistinctFields[field] {
+		return nil, fmt.Errorf("不支持的候选值字段: %s", field)
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	tx := LOG_DB.Table("logs").Distinct(field)
+	if userId != 0 {
+		tx = tx.Where("user_id = ?", userId)
+	}
+	if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+	if startTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	values := make([]string, 0)
+	err := tx.Order(field + " asc").Limit(limit).Pluck(field, &values).Error
+	return values, err
+}
