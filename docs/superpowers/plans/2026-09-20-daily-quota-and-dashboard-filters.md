@@ -28,6 +28,8 @@
 - 不改 `model.User` 既有字段语义，不改备份导出格式（因此用户列表的今日用量用 DTO 拼装，不给 `model.User` 加字段）。
 - 图片与音频请求不累加 token，只受额度上限约束。
 - 前端三主题各自构建；`web/build/` 被 gitignore，不入库。
+- **Windows 测试陷阱**：所有用 `t.TempDir()` 建 sqlite 库的测试辅助函数，都必须在 `t.Cleanup` 里关闭连接（`db.DB()` → `Close()`），且注册顺序要在 `t.TempDir()` 之后——`t.Cleanup` 是 LIFO，这样关闭会先于 TempDir 的目录删除执行。否则 Windows 报 `The process cannot access the file because it is being used by another process`，会把整个包判为 FAIL。计划里给出的测试辅助函数已包含这段清理。
+- **已知基线失败（与本次改动无关，验证时排除）**：`common/image` 的 `TestDecode` 会联网从 wikimedia 下载测试图片，本机网络下报 `image: unknown format` 并 panic。因此 `go test ./...` 的验收口径是「除 `common/image` 外全部 ok」；跑全量时用 `go test $(go list ./... | grep -v common/image)`。
 - 每个任务结束必须 `go build ./...` 或对应主题 `npm run build` 通过后再提交。
 
 ## 实施顺序与依赖
@@ -92,6 +94,12 @@ func setupModelTestDB(t *testing.T) *gorm.DB {
 	oldDB := DB
 	DB = db
 	t.Cleanup(func() { DB = oldDB })
+	// Windows 上必须先释放 sqlite 文件句柄，否则 t.TempDir 的清理会报
+	// "The process cannot access the file because it is being used by another process"
+	// 而把整个包判为 FAIL。t.Cleanup 是 LIFO，这里在 TempDir 之后注册，因此先执行。
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 	return db
 }
 
@@ -1256,6 +1264,11 @@ func setupLogTestDB(t *testing.T) *gorm.DB {
 		common.UsingPostgreSQL = oldPG
 		common.UsingMySQL = oldMySQL
 	})
+	// Windows 上必须先释放 sqlite 文件句柄，否则 t.TempDir 的清理会报
+	// "The process cannot access the file because it is being used by another process"。
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 	return db
 }
 
@@ -1920,6 +1933,11 @@ func setupLogDBForController(t *testing.T) {
 	old := model.LOG_DB
 	model.LOG_DB = db
 	t.Cleanup(func() { model.LOG_DB = old })
+	// Windows 上必须先释放 sqlite 文件句柄，否则 t.TempDir 的清理会报
+	// "The process cannot access the file because it is being used by another process"。
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 }
 
 func getLogFilters(t *testing.T, id, role int, query string) *httptest.ResponseRecorder {
