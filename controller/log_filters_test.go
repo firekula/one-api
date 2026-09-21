@@ -102,4 +102,40 @@ func TestGetLogFiltersScopesByRole(t *testing.T) {
 	if len(narrowed.Data.Tokens) != 1 || narrowed.Data.Tokens[0] != "t2" {
 		t.Fatalf("按用户收窄令牌失败: %v", narrowed.Data.Tokens)
 	}
+
+	// models 与 tokens 是两次独立查询，非管理员同样必须按自己收窄
+	w = getLogFilters(t, 1, model.RoleCommonUser, "")
+	var nonAdminModels filterResp
+	if err := json.Unmarshal(w.Body.Bytes(), &nonAdminModels); err != nil {
+		t.Fatalf("解析失败: %v，body=%s", err, w.Body.String())
+	}
+	if len(nonAdminModels.Data.Models) != 1 || nonAdminModels.Data.Models[0] != "gpt-3.5-turbo" {
+		t.Fatalf("非管理员模型候选应只有自己的: %v", nonAdminModels.Data.Models)
+	}
+
+	// 作用域不可被参数反转：非管理员传 ?username=bob 也只能看到自己的令牌/模型，且没有 users
+	w = getLogFilters(t, 1, model.RoleCommonUser, "?username=bob")
+	var nonAdminSpoof filterResp
+	if err := json.Unmarshal(w.Body.Bytes(), &nonAdminSpoof); err != nil {
+		t.Fatalf("解析失败: %v，body=%s", err, w.Body.String())
+	}
+	if len(nonAdminSpoof.Data.Users) != 0 {
+		t.Fatalf("非管理员传 username 也不应拿到 users，实际 %v", nonAdminSpoof.Data.Users)
+	}
+	if len(nonAdminSpoof.Data.Tokens) != 1 || nonAdminSpoof.Data.Tokens[0] != "t1" {
+		t.Fatalf("非管理员传 username 不应改变令牌作用域: %v", nonAdminSpoof.Data.Tokens)
+	}
+	if len(nonAdminSpoof.Data.Models) != 1 || nonAdminSpoof.Data.Models[0] != "gpt-3.5-turbo" {
+		t.Fatalf("非管理员传 username 不应改变模型作用域: %v", nonAdminSpoof.Data.Models)
+	}
+
+	// 管理员按 username 收窄时，models 必须与 tokens 同步收窄
+	w = getLogFilters(t, 99, model.RoleRootUser, "?username=bob")
+	var narrowedModels filterResp
+	if err := json.Unmarshal(w.Body.Bytes(), &narrowedModels); err != nil {
+		t.Fatalf("解析失败: %v，body=%s", err, w.Body.String())
+	}
+	if len(narrowedModels.Data.Models) != 1 || narrowedModels.Data.Models[0] != "claude-3" {
+		t.Fatalf("按用户收窄模型候选失败: %v", narrowedModels.Data.Models)
+	}
 }
