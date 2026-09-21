@@ -25,6 +25,18 @@ import { ITEMS_PER_PAGE } from '../constants';
 import { renderColorLabel, renderQuota } from '../helpers/render';
 import { Link } from 'react-router-dom';
 
+// 候选值来自日志表：错误类型日志的 token_name / model_name 可能是空串，
+// 直接渲染会出现一个空白选项，这里统一剔除空白值并去重。
+const sanitizeCandidates = (list) =>
+  Array.isArray(list)
+    ? [...new Set(list.filter((v) => typeof v === 'string' && v.trim() !== ''))]
+    : [];
+
+// 用户名/时间区间变化后候选值会重新拉取，已选中的值可能不在新列表里；此时把它
+// 保留在选项首位，避免筛选仍然生效、下拉却看起来是空的。
+const withSelected = (list, selected) =>
+  selected && !list.includes(selected) ? [selected, ...list] : list;
+
 function renderTimestamp(timestamp, request_id) {
   return (
     <code
@@ -161,6 +173,39 @@ const LogsTable = () => {
     quota: 0,
     token: 0,
   });
+
+  const [candidates, setCandidates] = useState({
+    users: [],
+    tokens: [],
+    models: [],
+  });
+
+  const fetchCandidates = async () => {
+    try {
+      const query = new URLSearchParams({
+        start_timestamp: Math.floor(Date.parse(start_timestamp) / 1000),
+        end_timestamp: Math.floor(Date.parse(end_timestamp) / 1000),
+        username: isAdminUser ? username : '',
+      });
+      const res = await API.get(`/api/log/filters?${query.toString()}`);
+      if (res.data.success) {
+        const data = res.data.data || {};
+        setCandidates({
+          users: sanitizeCandidates(data.users),
+          tokens: sanitizeCandidates(data.tokens),
+          models: sanitizeCandidates(data.models),
+        });
+      }
+    } catch (error) {
+      // 候选值拉取失败不阻塞日志列表本身，退化为只保留「全部」
+      setCandidates({ users: [], tokens: [], models: [] });
+    }
+  };
+
+  useEffect(() => {
+    fetchCandidates();
+    // 用户名变化时令牌/模型候选值要跟着收窄
+  }, [start_timestamp, end_timestamp, username]);
 
   const LOG_OPTIONS = [
     { key: '0', text: t('log.type.all'), value: 0 },
@@ -325,25 +370,43 @@ const LogsTable = () => {
       </Header>
       <Form>
         <Form.Group>
-          <Form.Input
+          <Form.Select
             fluid
             label={t('log.table.token_name')}
             size={'small'}
             width={3}
+            options={[
+              { key: '', text: t('log.table.all'), value: '' },
+              ...withSelected(candidates.tokens, token_name).map((name) => ({
+                key: name,
+                text: name,
+                value: name,
+              })),
+            ]}
             value={token_name}
-            placeholder={t('log.table.token_name_placeholder')}
             name='token_name'
-            onChange={handleInputChange}
+            onChange={(e, { value }) =>
+              handleInputChange(e, { name: 'token_name', value })
+            }
           />
-          <Form.Input
+          <Form.Select
             fluid
             label={t('log.table.model_name')}
             size={'small'}
             width={3}
+            options={[
+              { key: '', text: t('log.table.all'), value: '' },
+              ...withSelected(candidates.models, model_name).map((name) => ({
+                key: name,
+                text: name,
+                value: name,
+              })),
+            ]}
             value={model_name}
-            placeholder={t('log.table.model_name_placeholder')}
             name='model_name'
-            onChange={handleInputChange}
+            onChange={(e, { value }) =>
+              handleInputChange(e, { name: 'model_name', value })
+            }
           />
           <Form.Input
             fluid
@@ -388,15 +451,24 @@ const LogsTable = () => {
                 name='channel'
                 onChange={handleInputChange}
               />
-              <Form.Input
+              <Form.Select
                 fluid
                 label={t('log.table.username')}
                 size={'small'}
                 width={3}
+                options={[
+                  { key: '', text: t('log.table.all'), value: '' },
+                  ...withSelected(candidates.users, username).map((name) => ({
+                    key: name,
+                    text: name,
+                    value: name,
+                  })),
+                ]}
                 value={username}
-                placeholder={t('log.table.username_placeholder')}
                 name='username'
-                onChange={handleInputChange}
+                onChange={(e, { value }) =>
+                  handleInputChange(e, { name: 'username', value })
+                }
               />
             </Form.Group>
           </>
