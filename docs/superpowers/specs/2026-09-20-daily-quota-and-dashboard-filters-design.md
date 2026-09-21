@@ -407,7 +407,7 @@ GET /api/log/filters
 | 主题 | 文件 |
 |---|---|
 | default | `src/pages/Dashboard/index.js`、`Dashboard.css`、`src/components/LogsTable.js`、`src/pages/User/EditUser.js`、`src/components/UsersTable.js`、`src/components/OperationSetting.js`、`src/locales/zh/translation.json`、`src/locales/en/translation.json` |
-| berry | `src/views/Dashboard/index.js`、`src/utils/chart.js`、`src/views/Log/index.js`、`src/views/Log/component/TableToolBar.js`、`src/views/User/component/EditModal.js`、`src/views/User/TableRow.js`、`src/views/Setting/component/OperationSetting.js` |
+| berry | `src/views/Dashboard/index.js`、`src/utils/chart.js`、`src/views/Log/index.js`、`src/views/Log/component/TableToolBar.js`、`src/views/User/component/EditModal.js`、`src/views/User/component/TableRow.js`、`src/views/Setting/component/OperationSetting.js` |
 | air | `src/pages/Detail/*` → `src/pages/Dashboard/*`、`src/App.js`、`src/components/SiderBar.js`、`src/components/LogsTable.js`、`src/pages/User/EditUser.js`、`src/components/UsersTable.js`、`src/components/OperationSetting.js` |
 
 文案：default/berry 的总览与日志筛选栏、用户编辑表单走 i18n（新增 `dashboard.filters.*`、`log.filter.*`、`user.edit.daily_*`、`setting.operation.quota.daily_*`、`user.table.today_usage`，`zh`/`en` 两份同步）；air 沿用该主题现状的硬编码中文。

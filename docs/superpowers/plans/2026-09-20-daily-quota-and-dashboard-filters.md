@@ -3230,7 +3230,7 @@ git commit -m "feat(berry): 总览支持时间段/粒度/全站范围与筛选"
 **Files:**
 - Modify: `web/berry/src/views/User/component/EditModal.js`
 - Modify: `web/berry/src/views/Setting/component/OperationSetting.js`
-- Modify: `web/berry/src/views/User/TableRow.js`
+- Modify: `web/berry/src/views/User/component/TableRow.js`
 
 - [ ] **Step 1: 用户编辑弹窗的三态控件**
 
@@ -3249,15 +3249,18 @@ git commit -m "feat(berry): 总览支持时间段/粒度/全站范围与筛选"
 
 - [ ] **Step 3: 用户表格显示今日用量**
 
-`TableRow.js` 的统计信息单元格里追加：
+`TableRow.js` 的统计信息单元格里，在「请求次数」那个 `Tooltip` 之后（约 101 行）追加。注意该文件的行变量名是 `item`（不是 `record`），且没有导入 `Typography`——沿用同一单元格已有的 `Tooltip` + `Label` 组合：
 
 ```jsx
-        <Typography variant="body2">
-          今日用量 {renderNumber(record.today_tokens)}
-          {record.effective_daily_token_limit > 0
-            ? ` / ${renderNumber(record.effective_daily_token_limit)}`
-            : ' / 不限'}
-        </Typography>
+            <Tooltip title={'今日用量 / 单日上限'} placement="top">
+              <Label color={'primary'} variant="outlined">
+                {' '}
+                {renderNumber(item.today_tokens)}
+                {item.effective_daily_token_limit > 0
+                  ? ` / ${renderNumber(item.effective_daily_token_limit)}`
+                  : ' / 不限'}{' '}
+              </Label>
+            </Tooltip>
 ```
 
 - [ ] **Step 4: 构建与验证**
