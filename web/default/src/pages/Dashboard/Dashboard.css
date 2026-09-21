@@ -106,4 +106,10 @@
     border: none !important;
     box-shadow: none !important;
     padding: 1rem 0 !important;
-} 
+}
+
+/* 筛选栏：小屏时换行，避免下拉被压缩到不可读 */
+.chart-card .ui.form .inline.fields {
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
