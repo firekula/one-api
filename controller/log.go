@@ -143,6 +143,54 @@ func GetLogsSelfStat(c *gin.Context) {
 	return
 }
 
+// GetLogFilters 返回所选区间内日志里实际出现过的用户/令牌/模型候选值，供筛选下拉使用。
+// 非管理员按自己收窄，且不返回 users（该筛选框对非管理员隐藏）。
+func GetLogFilters(c *gin.Context) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+
+	userId := c.GetInt(ctxkey.Id)
+	isAdmin := c.GetInt(ctxkey.Role) >= model.RoleAdminUser
+	usernameFilter := ""
+	if isAdmin {
+		// 管理员看全站；带 username 时用它收窄令牌候选值
+		userId = 0
+		usernameFilter = c.Query("username")
+	}
+	const candidateLimit = 500
+
+	users := make([]string, 0)
+	if isAdmin {
+		values, err := model.SearchLogDistinctValues(0, "", startTimestamp, endTimestamp, "username", candidateLimit)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+			return
+		}
+		users = values
+	}
+
+	tokens, err := model.SearchLogDistinctValues(userId, usernameFilter, startTimestamp, endTimestamp, "token_name", candidateLimit)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+	models, err := model.SearchLogDistinctValues(userId, usernameFilter, startTimestamp, endTimestamp, "model_name", candidateLimit)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "data": nil})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"users":  users,
+			"tokens": tokens,
+			"models": models,
+		},
+	})
+}
+
 func DeleteHistoryLogs(c *gin.Context) {
 	targetTimestamp, _ := strconv.ParseInt(c.Query("target_timestamp"), 10, 64)
 	if targetTimestamp == 0 {
