@@ -3658,8 +3658,9 @@ git commit -m "docs: 用户手册补充单日用量上限与筛选候选值说�
   三主题都有该形态。
 - **`usage == nil` 的请求不记账**（上游不返回 usage 时既不扣费也不计入上限），与本仓库既有的计费空档同源。
 - **用户级 403 会计入渠道健康指标**：日限 403 是设计上会反复触发的，建议后续区分"用户侧 4xx"与渠道故障。
-- **MySQL/PostgreSQL 的分桶与 upsert 从未被任何测试执行**：两个"生产"方言目前只依赖"应用时区 == 数据库
-  会话时区"这一已在手册写明的假设；真正的解法是对非 SQLite 引擎跑一次集成测试。
+- **MySQL/PostgreSQL 的分支缺少引擎级验证** —— 这条已在 2026-09-21 以真实缺陷的形式应验：本机 Docker 部署使用 PostgreSQL 16，运行时暴露出 `RecordDailyUsage` 的 `ON CONFLICT DO UPDATE SET col = col + ?` 用了未限定列名，PostgreSQL 因目标表与 `excluded` 同名而报 `column reference "completion_tokens" is ambiguous`（SQLSTATE 42702），导致**单日用量静默不累加、日限永不触发**（MySQL 与 SQLite 接受未限定写法，所以 SQLite 测试全绿却掩盖了它）。
+  已修复（`ac11462`）：仅 PostgreSQL 用表名限定，并补了用 DryRun 断言生成 SQL 的回归测试 + 变异校验；随后在真实 PostgreSQL 上以容器内检查程序验证通过（累加 16/80/100、超限被拦且消息正确、未超限放行）。
+  **仍然待办**：MySQL 分支依旧只在 SQLite 上间接验证过；本机 docker compose 的默认注释指向 MySQL 5.7，正式启用前应在真实 MySQL 上跑一次同样的检查。
 - `logs` 表补 `token_id`（设计文档已标为不纳入本次）、`(username)` 单列索引（仅在慢日志显示需要时再加）。
 
 ### 预先存在的文档漂移（本分支之前就有，未在本分支修改）
