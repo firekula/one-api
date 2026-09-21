@@ -327,7 +327,8 @@
       "prompt_tokens": "Prompt Tokens",
       "completion_tokens": "Completion Tokens",
       "quota": "Quota",
-      "detail": "Detail"
+      "detail": "Detail",
+      "all": "All"
     },
     "buttons": {
       "query": "Action",
@@ -350,6 +351,13 @@
       "group_addition": "Please edit group multipliers in system settings to add new group:",
       "quota": "Remaining Quota",
       "quota_placeholder": "Please enter new remaining quota",
+      "daily_token_limit": "Daily token limit",
+      "daily_quota_limit": "Daily quota limit",
+      "daily_token_limit_value": "Token limit value",
+      "daily_quota_limit_value": "Quota limit value",
+      "limit_mode_follow_global": "Follow global default",
+      "limit_mode_exempt": "Exempt (unlimited)",
+      "limit_mode_custom": "Custom",
       "github_id": "Linked GitHub Account",
       "github_id_placeholder": "Read-only, user must link through personal settings page, cannot be modified directly",
       "wechat_id": "Linked WeChat Account",
@@ -381,6 +389,9 @@
       "remaining_quota": "Remaining Quota",
       "used_quota": "Used Quota",
       "request_count": "Request Count",
+      "today_usage": "Today",
+      "today_quota_usage": "Today's quota usage",
+      "unlimited": "Unlimited",
       "role_types": {
         "normal": "Normal User",
         "admin": "Admin",
@@ -412,6 +423,23 @@
     }
   },
   "dashboard": {
+    "filters": {
+      "today": "Today",
+      "last_7_days": "Last 7 days",
+      "last_30_days": "Last 30 days",
+      "start": "Start date",
+      "end": "End date",
+      "granularity": "Granularity",
+      "granularity_day": "Day",
+      "granularity_hour": "Hour",
+      "scope": "Scope",
+      "scope_self": "Mine only",
+      "scope_all": "Whole station",
+      "username": "User",
+      "token_name": "Token",
+      "model_name": "Model",
+      "all": "All"
+    },
     "charts": {
       "requests": {
         "title": "Model Request Trend",
@@ -615,6 +643,9 @@
         "inviter_reward_placeholder": "e.g.: 2000",
         "invitee_reward": "Reward Quota for Using Invite Code",
         "invitee_reward_placeholder": "e.g.: 1000",
+        "daily_token_limit_default": "Daily token limit (global default)",
+        "daily_quota_limit_default": "Daily quota limit (global default)",
+        "daily_limit_placeholder": "0 means unlimited",
         "buttons": {
           "save": "Save Quota Settings"
         }
