@@ -45,8 +45,18 @@ const validationSchema = Yup.object().shape({
     then: Yup.number().min(0, '额度 不能小于 0'),
     otherwise: Yup.number()
   }),
-  daily_token_limit: Yup.number().min(-1, '单日上限不能小于 -1'),
-  daily_quota_limit: Yup.number().min(-1, '单日上限不能小于 -1')
+  // 两个上限只在「自定义」模式下校验：其余模式下数字输入是卸载的，若照样做数字校验，
+  // 残留的空串会拦下 handleSubmit，用户点「保存」既没有请求也没有任何提示。
+  daily_token_limit: Yup.number().when('daily_token_mode', {
+    is: 'custom',
+    then: (schema) => schema.typeError('自定义单日 token 上限必须是数字').min(1, '自定义单日 token 上限不能小于 1'),
+    otherwise: () => Yup.mixed()
+  }),
+  daily_quota_limit: Yup.number().when('daily_quota_mode', {
+    is: 'custom',
+    then: (schema) => schema.typeError('自定义单日额度上限必须是数字').min(1, '自定义单日额度上限不能小于 1'),
+    otherwise: () => Yup.mixed()
+  })
 });
 
 const originInputs = {
@@ -56,6 +66,8 @@ const originInputs = {
   password: '',
   group: 'default',
   quota: 0,
+  daily_token_mode: 'follow',
+  daily_quota_mode: 'follow',
   daily_token_limit: 0,
   daily_quota_limit: 0
 };
@@ -86,21 +98,32 @@ const encodeLimitMode = (mode, value) => {
   return Math.max(parseInt(value) || 0, 1);
 };
 
+// 切换模式时归一化数字输入，保证「界面显示的值」与「保存下去的值」一致：
+// - 离开「自定义」：归零。不这么做，卸载的输入里会残留空串等非法值。
+// - 进入「自定义」：当前值若不是 >= 1（跟随与豁免的展示值都被钳制成 0），先播种 1，
+//   否则界面显示 0、校验却要求 >= 1，保存还会把 1 静默存进去。
+const resolveModeSwitchValue = (nextMode, currentValue) => {
+  if (nextMode !== 'custom') {
+    return 0;
+  }
+  return Number(currentValue) >= 1 ? currentValue : 1;
+};
+
 const EditModal = ({ open, userId, onCancel, onOk }) => {
   const theme = useTheme();
   const [inputs, setInputs] = useState(originInputs);
   const [groupOptions, setGroupOptions] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
-  const [dailyTokenMode, setDailyTokenMode] = useState('follow');
-  const [dailyQuotaMode, setDailyQuotaMode] = useState('follow');
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
     setSubmitting(true);
 
     // follow 必须显式发 0：这两个字段在模型里是 *int64，正是为了绕开 GORM 结构体 Updates 跳过零值，
     // 发 null 或省略键会让上一次设置的上限静默留存在库里。
+    // daily_*_mode 只是表单 UI 状态，不进请求体。
+    const { daily_token_mode: dailyTokenMode, daily_quota_mode: dailyQuotaMode, ...rest } = values;
     const data = {
-      ...values,
+      ...rest,
       daily_token_limit: encodeLimitMode(dailyTokenMode, values.daily_token_limit),
       daily_quota_limit: encodeLimitMode(dailyQuotaMode, values.daily_quota_limit)
     };
@@ -142,10 +165,12 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       data.is_edit = true;
       // 先按后端原始值判定三态，再做钳制：若先钳制，存量为 -1 的豁免会被算成 0（跟随全局），
       // 用户下一次保存就把豁免静默改掉了。
-      setDailyTokenMode(resolveLimitMode(data.daily_token_limit));
-      setDailyQuotaMode(resolveLimitMode(data.daily_quota_limit));
+      const dailyTokenMode = resolveLimitMode(data.daily_token_limit);
+      const dailyQuotaMode = resolveLimitMode(data.daily_quota_limit);
       setInputs({
         ...data,
+        daily_token_mode: dailyTokenMode,
+        daily_quota_mode: dailyQuotaMode,
         daily_token_limit: Math.max(data.daily_token_limit || 0, 0),
         daily_quota_limit: Math.max(data.daily_quota_limit || 0, 0)
       });
@@ -169,8 +194,6 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       loadUser().then();
     } else {
       setInputs(originInputs);
-      setDailyTokenMode('follow');
-      setDailyQuotaMode('follow');
     }
   }, [userId]);
 
@@ -182,7 +205,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
       <Divider />
       <DialogContent>
         <Formik initialValues={inputs} enableReinitialize validationSchema={validationSchema} onSubmit={submit}>
-          {({ errors, handleBlur, handleChange, handleSubmit, touched, values, isSubmitting }) => (
+          {({ errors, handleBlur, handleChange, handleSubmit, setFieldValue, touched, values, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.username && errors.username)} sx={{ ...theme.typography.otherInput }}>
                 <InputLabel htmlFor="channel-username-label">用户名</InputLabel>
@@ -286,8 +309,12 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                     <Select
                       id="channel-daily-token-limit-label"
                       label="单日 token 上限"
-                      value={dailyTokenMode}
-                      onChange={(e) => setDailyTokenMode(e.target.value)}
+                      value={values.daily_token_mode}
+                      onChange={(e) => {
+                        const nextMode = e.target.value;
+                        setFieldValue('daily_token_mode', nextMode);
+                        setFieldValue('daily_token_limit', resolveModeSwitchValue(nextMode, values.daily_token_limit));
+                      }}
                       MenuProps={{
                         PaperProps: {
                           style: {
@@ -304,7 +331,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                     </Select>
                   </FormControl>
 
-                  {dailyTokenMode === 'custom' && (
+                  {values.daily_token_mode === 'custom' && (
                     <FormControl
                       fullWidth
                       error={Boolean(touched.daily_token_limit && errors.daily_token_limit)}
@@ -335,8 +362,12 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                     <Select
                       id="channel-daily-quota-limit-label"
                       label="单日额度上限"
-                      value={dailyQuotaMode}
-                      onChange={(e) => setDailyQuotaMode(e.target.value)}
+                      value={values.daily_quota_mode}
+                      onChange={(e) => {
+                        const nextMode = e.target.value;
+                        setFieldValue('daily_quota_mode', nextMode);
+                        setFieldValue('daily_quota_limit', resolveModeSwitchValue(nextMode, values.daily_quota_limit));
+                      }}
                       MenuProps={{
                         PaperProps: {
                           style: {
@@ -353,7 +384,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                     </Select>
                   </FormControl>
 
-                  {dailyQuotaMode === 'custom' && (
+                  {values.daily_quota_mode === 'custom' && (
                     <FormControl
                       fullWidth
                       error={Boolean(touched.daily_quota_limit && errors.daily_quota_limit)}
