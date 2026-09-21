@@ -301,6 +301,21 @@ const UsersTable = () => {
                         }
                       />
                     </div>
+                    <div>
+                      <Popup
+                        content={t('user.table.today_quota_usage')}
+                        trigger={
+                          <Label basic>
+                            {renderNumber(user.today_quota || 0)}
+                            {user.effective_daily_quota_limit > 0
+                              ? ` / ${renderNumber(
+                                  user.effective_daily_quota_limit
+                                )}`
+                              : ` / ${t('user.table.unlimited')}`}
+                          </Label>
+                        }
+                      />
+                    </div>
                   </Table.Cell>
                   <Table.Cell>{renderRole(user.role, t)}</Table.Cell>
                   <Table.Cell>{renderStatus(user.status)}</Table.Cell>
