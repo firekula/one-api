@@ -306,10 +306,11 @@ const UsersTable = () => {
                         content={t('user.table.today_quota_usage')}
                         trigger={
                           <Label basic>
-                            {renderNumber(user.today_quota || 0)}
+                            {renderQuota(user.today_quota || 0, t)}
                             {user.effective_daily_quota_limit > 0
-                              ? ` / ${renderNumber(
-                                  user.effective_daily_quota_limit
+                              ? ` / ${renderQuota(
+                                  user.effective_daily_quota_limit,
+                                  t
                                 )}`
                               : ` / ${t('user.table.unlimited')}`}
                           </Label>
