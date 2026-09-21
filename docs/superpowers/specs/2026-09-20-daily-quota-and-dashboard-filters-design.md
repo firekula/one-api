@@ -46,6 +46,35 @@
 - 日志页「渠道 ID」筛选维持文本框（管理员使用，习惯按 ID 查，且渠道数量有限）
 - 给 `logs` 表补 `token_id` 列以支持按令牌 ID（而非名称）过滤
 
+## 上游对比与非采纳记录（Calcium-Ion/new-api）
+
+本仓库的 `origin` 是 `firekula/one-api`，模块路径与 README 仍沿用 `songquanpeng/one-api`（`VERSION` 为 v1.2.2），但代码里带有 Calcium-Ion/new-api 的特征（air 主题的 `enable_drawing`、`mj_notify_enabled`、`data_export_default_time`），上游应为 **Calcium-Ion/new-api**（即"true-admin"系）。按用户要求核对上游是否已有"每人额度、周期额度"，结论如下（2026-09-21 核对上游 `main` 分支）。
+
+### 核对结果
+
+| 位置 | 结论 |
+|---|---|
+| 上游 `model/user.go` | `User` **没有**任何单日/周期/期限额度字段（无 `QuotaDeadline`/`DailyQuota`/`PeriodQuota`/`QuotaLimit`）。额度相关字段只有余额与累计：`Quota`、`UsedQuota`、`AffQuota`、`AffHistoryQuota` |
+| 上游 `model/token.go` | `Token` 没有单日/周期字段；唯一时间字段是 `ExpiredTime`（`-1` 表示永不过期），约束的是令牌有效期，不是周期额度 |
+| 上游 `model/subscription.go` | **周期额度确实存在，但在付费订阅子系统里**：`SubscriptionPlan.QuotaResetPeriod`（`never`/`daily`/`weekly`/`monthly`/`custom`），`UserSubscription.{AmountTotal, AmountUsed, LastResetTime, NextResetTime}`，重置由 `ResetDueSubscriptions`（扫描 `next_reset_time` 到期）与消费前的 `maybeResetUserSubscriptionWithPlanTx` 惰性触发，重置动作是 `AmountUsed = 0`；另有 `SubscriptionPreConsumeRecord`（`RequestId` 唯一键）做预扣记录 |
+| 上游 `model/usedata_flow.go` | 使用统计走独立的事实表 `quota_data`：`FlowQuotaData` 按角色分组聚合 `count`/`quota`/`token_used`（自己按令牌/分组/模型；管理员按用户/用户名/分组/模型/渠道；root 再加节点）。**该表有 `token_id`** |
+| 本仓库 | `model/` 只有 13 个文件，**没有** `subscription`/`usedata`/`quota_reserve`/`checkin`/`topup`，也没有 `quota_data` 表与 `/api/data/` 统计接口 |
+
+因此：上游的周期额度与使用统计属于**比本仓库新的一批特性，本仓库里不存在可复用的实现**。air 主题那个坏掉的"数据看板"（请求 `/api/data/`）正是上游 `/api/data/` 前端的遗留物，其后端从未随仓库带入。
+
+### 非采纳理由
+
+1. **上游的周期额度绑定在付费订阅上**（Plan / Order / Stripe / Creem / 群组升降级），语义是"买套餐拿周期额度"。本次要的是"全站默认单日上限 + 按用户豁免/覆盖"，没有套餐、订单、支付语义；整体移植会把计价子系统一并带入。
+2. **上游的周期额度只有 quota 一个口径**（`AmountTotal`/`AmountUsed`），没有 token 数口径；本次明确要求 token 与 quota 双维度。
+3. **上游靠 `NextResetTime` 定时扫描 + 惰性重置管理周期**；本次用"按本地日期分行的累计表"实现跨天重置，不需要定时任务，也不需要 `weekly` 对齐周一 00:00 这类重置对齐语义。
+4. **上游统计读 `quota_data`**（每请求写一行统计事实），本仓库没有该表。引入它等于新增一张高频写入表 + 迁移，且历史数据无法回填；而按 `logs` 聚合已能满足"按天/小时 × 模型"的复盘需求。
+
+### 为降低未来同步成本的约束
+
+- 命名避开上游已有标识符：新表 `daily_usage`（不叫 `quota_data`/`user_subscriptions`），新字段 `daily_token_limit`/`daily_quota_limit`，新选项 `DailyTokenLimitDefault`/`DailyQuotaLimitDefault`。
+- **已知差异代价**：上游 `quota_data` 有 `token_id`，本仓库 `logs` 没有，所以令牌筛选只能按名称（见第三部分）。
+- 若将来整体并入上游的订阅体系，会出现两套并存的周期额度（一套管"全站默认日限"，一套管"套餐周期额度"），届时需要在准入顺序上定义优先级。本设计不做这件事，仅在此记录以避免重复讨论。
+
 ## 第一部分：单日用量上限
 
 ### 数据模型
