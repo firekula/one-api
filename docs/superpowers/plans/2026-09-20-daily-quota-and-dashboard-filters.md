@@ -3530,3 +3530,28 @@ git commit -m "docs: 用户手册补充单日用量上限与筛选候选值说�
 1. 设计文档提到"`docs/getting-started/configuration.md` 若列举运营设置项则补充"——该文件目前是环境变量参考，本次不新增环境变量，因此 D8 只改用户手册。若执行时发现该文件确实列举了运营设置，再补两行。
 2. `controller/option.go` 的 `UpdateOption` 需要 `strconv`，`controller/log.go` 的 `GetLogFilters` 依赖 `model.RoleAdminUser` 与 `ctxkey`——这些 import 若缺失需在对应任务内补上，任务描述已注明。
 3. 三主题前端任务的步骤给出的是关键代码与锚点行号，落地时以文件现状为准保持周边风格一致；行号来自 2026-09-20 的快照，若已有改动请按锚点内容定位而不是死磕行号。
+
+---
+
+## 验收记录：Task A7 单日上限的端到端验收（2026-09-21）
+
+**结果：通过** —— 6 个验收点全部 PASS，另有 2 项附加验证 PASS，无代码改动。完整证据（命令、原始输出、stub 形状、API 载荷）见 `.superpowers/sdd/2026-09-20-daily-quota-and-dashboard-filters/task-A7-report.md`。
+
+驱动方式（无浏览器，按本任务允许的替代方案）：root 走 `POST /api/user/login` 取会话 cookie；上游用本地 stub（`POST /v1/chat/completions` 固定返回 `usage` 80/40）；渠道 `POST /api/channel/`（type 1，`base_url=http://127.0.0.1:18081`）；令牌 `POST /api/token/` 创建后从 `GET /api/token/` 读回 key；新建用户 `dailytest` 单独登录后建令牌。每请求结算 `quota=50`、`tokens=120`。
+
+- **1 token 维度拦截** PASS：`daily_token_limit=100`，首请求 200（累计 120），次请求 403 `insufficient_user_daily_tokens`，消息 `已用 120 / 上限 100`；stub 计数未增加（拒绝发生在上游之前），用户额度/已用额度未变（拒绝发生在预扣之前）。
+- **2 quota 维度拦截** PASS：`daily_quota_limit=150`，首请求 200（累计 50），次请求 403 `insufficient_user_daily_quota`，消息 `已用 ＄0.000100 额度 / 上限 ＄0.000300 额度`。
+- **3 预扣短路陷阱** PASS：用户额度提到 5×10¹⁴（远超 100×预扣），日志确认进入 `trusted and no need to pre-consume` 分支（preConsumedQuota 被置 0），token 与 quota 两个维度仍分别 403，证明判定用的是短路前的估算值。
+- **4 豁免 `-1`** PASS：`daily_token_limit=-1, daily_quota_limit=-1` 后连续 3 次请求均 200，且继续记账（120→480 tokens）；随后改回 `0` 成功，验证指针字段可回退到"跟随全局默认"。
+- **5 记账可见** PASS：`GET /api/user/?p=0` 尚无 `today_tokens/today_quota`（B5 未落地），按任务允许改为直接读表：清空后 3 次请求的 `daily_usage` 行为 `prompt 240 + completion 120 = 360` tokens、`quota 150`，与同时段 `logs type=2` 聚合完全一致。
+- **6 不依赖日志开关** PASS：`LogConsumeEnabled=false`（option 已落库为 false）后 3 次请求仍 200，`daily_usage` 由 360/150 增至 720/300，而 `logs` 的 `type=2` 行数保持 3 不变；此时把 token 上限设回 100，仍按 403 拦截（上限本身也不依赖日志）。
+- **附加** PASS：用户字段为 `0` 时正确跟随全局默认（`DailyTokenLimitDefault=100` 时报错显示"上限 100"）。
+
+**偏差与观察**（均不阻塞，未放宽任何验收点）：
+
+1. 无浏览器/无真人，全部改用管理 API + 本地 stub 上游驱动；验收点本身未改。
+2. 本版本的令牌 key 是 48 位裸字符串，不带 `sk-` 前缀（`random.GenerateKey()`），计划里"复制 `sk-` 开头的 key"描述不准。
+3. `AddToken` 固定用调用者 id 作为 `user_id`，root 无法为 `dailytest` 建令牌，因此必须用 `dailytest` 自己登录建令牌（后续手工验收脚本需按此顺序）。
+4. quota 维度的预估含 `config.PreConsumedQuota`（默认 500），即 `(500 + promptTokens + max_tokens) × 倍率`；对本例（gpt-3.5-turbo、max_tokens=50）约为 139，因此额度上限低于约 139 时当天**首个**请求就会被拒。这是设计要求的从严行为，但建议在用户手册（D8）中写明这层含义。
+5. 两个维度的消息呈现不一致：token 维度用原始计数，quota 维度用货币格式——与设计一致，仅记录。
+6. 本次未覆盖：流式响应、Anthropic/Audio/Image 三条准入路径（A5 已接线，本次只跑了文本路径）、跨天翻转、并发竞争同一估算值，以及 B5 落地后的用户列表「今日用量」列。
