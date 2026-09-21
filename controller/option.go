@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/songquanpeng/one-api/common/config"
@@ -90,6 +91,14 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "无法启用 Turnstile 校验，请先填入 Turnstile 校验相关配置信息！",
+			})
+			return
+		}
+	case "DailyTokenLimitDefault", "DailyQuotaLimitDefault":
+		if v, err := strconv.ParseInt(option.Value, 10, 64); err != nil || v < 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "单日上限必须是不小于 0 的整数（0 表示不限制）",
 			})
 			return
 		}

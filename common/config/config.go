@@ -99,6 +99,11 @@ var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
 var QuotaRemindThreshold int64 = 1000
 var PreConsumedQuota int64 = 500
+
+// 单日用量上限的全局默认值，0 表示不限制。仅通过设置页（options 表）配置，不提供环境变量。
+var DailyTokenLimitDefault int64 = 0
+var DailyQuotaLimitDefault int64 = 0
+
 var ApproximateTokenEnabled = false
 var RetryTimes = 0
 

@@ -68,6 +68,8 @@ func InitOptionMap() {
 	config.OptionMap["QuotaForInvitee"] = strconv.FormatInt(config.QuotaForInvitee, 10)
 	config.OptionMap["QuotaRemindThreshold"] = strconv.FormatInt(config.QuotaRemindThreshold, 10)
 	config.OptionMap["PreConsumedQuota"] = strconv.FormatInt(config.PreConsumedQuota, 10)
+	config.OptionMap["DailyTokenLimitDefault"] = strconv.FormatInt(config.DailyTokenLimitDefault, 10)
+	config.OptionMap["DailyQuotaLimitDefault"] = strconv.FormatInt(config.DailyQuotaLimitDefault, 10)
 	config.OptionMap["ModelRatio"] = billingratio.ModelRatio2JSONString()
 	config.OptionMap["GroupRatio"] = billingratio.GroupRatio2JSONString()
 	config.OptionMap["CompletionRatio"] = billingratio.CompletionRatio2JSONString()
@@ -224,6 +226,10 @@ func updateOptionMap(key string, value string) (err error) {
 		config.QuotaRemindThreshold, _ = strconv.ParseInt(value, 10, 64)
 	case "PreConsumedQuota":
 		config.PreConsumedQuota, _ = strconv.ParseInt(value, 10, 64)
+	case "DailyTokenLimitDefault":
+		config.DailyTokenLimitDefault, _ = strconv.ParseInt(value, 10, 64)
+	case "DailyQuotaLimitDefault":
+		config.DailyQuotaLimitDefault, _ = strconv.ParseInt(value, 10, 64)
 	case "RetryTimes":
 		config.RetryTimes, _ = strconv.Atoi(value)
 	case "ModelRatio":

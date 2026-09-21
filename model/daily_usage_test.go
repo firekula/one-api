@@ -18,7 +18,7 @@ func setupModelTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("打开测试库失败: %v", err)
 	}
-	if err := db.AutoMigrate(&User{}, &DailyUsage{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &DailyUsage{}, &Option{}); err != nil {
 		t.Fatalf("迁移失败: %v", err)
 	}
 	oldDB := DB

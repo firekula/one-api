@@ -51,6 +51,11 @@ type User struct {
 	Group            string `json:"group" gorm:"type:varchar(32);default:'default'"`
 	AffCode          string `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	InviterId        int    `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	// 单日用量上限，三态：nil/0 = 跟随全局默认，-1 = 豁免（不限），>0 = 该用户的单独上限。
+	// 用指针而非 int64 是必须的：User.Update 是结构体形式的 Updates，GORM 会跳过零值字段，
+	// 非指针字段一旦被设过就无法再改回 0（跟随全局）。
+	DailyTokenLimit *int64 `json:"daily_token_limit" gorm:"bigint;default:0"`
+	DailyQuotaLimit *int64 `json:"daily_quota_limit" gorm:"bigint;default:0"`
 }
 
 func GetMaxUserId() int {
@@ -450,4 +455,28 @@ func updateUserRequestCount(id int, count int) {
 func GetUsernameById(id int) (username string) {
 	DB.Model(&User{}).Where("id = ?", id).Select("username").Find(&username)
 	return username
+}
+
+// resolveDailyLimit 把三态覆盖值与全局默认解析成"有效上限"，返回 0 表示不限。
+func resolveDailyLimit(override *int64, globalDefault int64) int64 {
+	if override != nil && *override < 0 {
+		return 0 // 豁免
+	}
+	if override != nil && *override > 0 {
+		return *override
+	}
+	if globalDefault > 0 {
+		return globalDefault
+	}
+	return 0 // 全局默认非正数一律按不限处理
+}
+
+// EffectiveDailyTokenLimit 返回该用户当前生效的单日 token 上限，0 表示不限。
+func (user *User) EffectiveDailyTokenLimit() int64 {
+	return resolveDailyLimit(user.DailyTokenLimit, config.DailyTokenLimitDefault)
+}
+
+// EffectiveDailyQuotaLimit 返回该用户当前生效的单日额度上限，0 表示不限。
+func (user *User) EffectiveDailyQuotaLimit() int64 {
+	return resolveDailyLimit(user.DailyQuotaLimit, config.DailyQuotaLimitDefault)
 }
