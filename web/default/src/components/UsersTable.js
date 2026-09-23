@@ -88,6 +88,12 @@ const UsersTable = () => {
       const { success, message } = res.data;
       if (success) {
         showSuccess(t('user.messages.operation_success'));
+        if (action === 'reset_daily_usage') {
+          // 当日用量已被清零，列表里的今日用量需要重新拉取才会更新
+          await loadUsers(0);
+          setActivePage(1);
+          return;
+        }
         let user = res.data.data;
         let newUsers = [...users];
         let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
@@ -381,6 +387,31 @@ const UsersTable = () => {
                           ? t('user.buttons.disable')
                           : t('user.buttons.enable')}
                       </Button>
+                      <Popup
+                        trigger={
+                          <Button size='tiny'>
+                            {t('user.buttons.reset_daily_usage')}
+                          </Button>
+                        }
+                        on='click'
+                        flowing
+                        hoverable
+                      >
+                        <Button
+                          size={'tiny'}
+                          negative
+                          onClick={() => {
+                            manageUser(
+                              user.username,
+                              'reset_daily_usage',
+                              idx
+                            );
+                          }}
+                        >
+                          {t('user.buttons.reset_daily_usage_confirm')}{' '}
+                          {user.username}
+                        </Button>
+                      </Popup>
                       <Button
                         size={'tiny'}
                         as={Link}

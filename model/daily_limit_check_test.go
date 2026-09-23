@@ -2,8 +2,10 @@ package model
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 )
 
@@ -71,6 +73,14 @@ func TestCheckUserDailyLimitTokenDimension(t *testing.T) {
 	if limitErr.Dimension != "token" || limitErr.Used != 900 || limitErr.Limit != 1000 || limitErr.Estimated != 101 {
 		t.Fatalf("错误详情不对: %+v", limitErr)
 	}
+	// 提示必须把"本次预估"也报出来：判定用的是"已用 + 本次预估"，只报"已用"
+	// 时（本次预估单独超限的场景，已用可能为 0）会让人误以为功能失效。
+	msg := err.Error()
+	for _, want := range []string{"900", "101", "1000", "本次预估"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("提示缺少 %q: %s", want, msg)
+		}
+	}
 }
 
 func TestCheckUserDailyLimitQuotaDimension(t *testing.T) {
@@ -92,6 +102,23 @@ func TestCheckUserDailyLimitQuotaDimension(t *testing.T) {
 	limitErr, _ := AsDailyLimitError(err)
 	if limitErr.Dimension != "quota" {
 		t.Fatalf("维度应为 quota，实际 %s", limitErr.Dimension)
+	}
+	// 额度维度三个数字都必须按 common.LogQuota 渲染，且同样包含"本次预估"
+	msg := err.Error()
+	for _, want := range []string{common.LogQuota(480), common.LogQuota(21), common.LogQuota(500), "本次预估"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("提示缺少 %q: %s", want, msg)
+		}
+	}
+}
+
+// TestDailyLimitErrorShowsEstimateWhenNothingUsed 复现用户遇到的误导场景：
+// 已用 0、本次预估 60010、上限 50000 时，提示里必须同时出现这三个数字。
+func TestDailyLimitErrorShowsEstimateWhenNothingUsed(t *testing.T) {
+	msg := (&DailyLimitError{Dimension: "token", Used: 0, Limit: 50000, Estimated: 60010}).Error()
+	want := "今日 token 用量已达上限（已用 0 + 本次预估 60010 / 上限 50000），请明日再试或联系管理员调整"
+	if msg != want {
+		t.Fatalf("提示文案不符:\n实际: %s\n期望: %s", msg, want)
 	}
 }
 

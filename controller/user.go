@@ -728,6 +728,7 @@ type ManageRequest struct {
 
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req ManageRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 
@@ -817,6 +818,27 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = model.RoleCommonUser
+	case "reset_daily_usage":
+		// 单日上限按服务器本地日期判定，管理员测试时不必等到第二天：删掉今天的
+		// 用量记录即可把两个维度一起清零。
+		if err := model.ResetTodayDailyUsage(user.Id); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		model.RecordLog(ctx, user.Id, model.LogTypeManage, "管理员重置了该用户的当日用量")
+		clearUser := model.User{
+			Role:   user.Role,
+			Status: user.Status,
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    clearUser,
+		})
+		return
 	}
 
 	if err := user.Update(false); err != nil {

@@ -419,7 +419,9 @@
       "disable": "禁用",
       "edit": "编辑",
       "promote": "提升",
-      "demote": "降级"
+      "demote": "降级",
+      "reset_daily_usage": "重置当日用量",
+      "reset_daily_usage_confirm": "重置该用户当日用量"
     }
   },
   "dashboard": {

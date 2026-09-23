@@ -96,6 +96,13 @@ func GetDailyUsages(userIds []int, day string) (map[int]*DailyUsage, error) {
 	return result, nil
 }
 
+// ResetTodayDailyUsage 删除某用户今天的用量记录，供管理员手动重置当日用量
+// （典型场景：测试单日上限，否则必须等到第二天或另建用户）。今天没有记录时
+// 视为无操作，返回 nil。只影响 today 这一天，历史日期不受影响。
+func ResetTodayDailyUsage(userId int) error {
+	return DB.Where("user_id = ? AND day = ?", userId, Today()).Delete(&DailyUsage{}).Error
+}
+
 // DailyLimitState 是判定一次请求是否超限所需的全部状态，用一条 SQL 取回。
 type DailyLimitState struct {
 	DailyTokenLimit *int64
@@ -136,13 +143,15 @@ type DailyLimitError struct {
 	Estimated int64
 }
 
+// Error 渲染成一行中文提示。三个数字缺一不可：判定用的是"已用 + 本次预估"，
+// 只报"已用"会在本次预估单独超限时显示成"已用 0 / 上限 N"，让人误以为功能失效。
 func (e *DailyLimitError) Error() string {
 	if e.Dimension == "quota" {
-		return fmt.Sprintf("今日额度用量已达上限（已用 %s / 上限 %s），请明日再试或联系管理员调整",
-			common.LogQuota(e.Used), common.LogQuota(e.Limit))
+		return fmt.Sprintf("今日额度用量已达上限（已用 %s + 本次预估 %s / 上限 %s），请明日再试或联系管理员调整",
+			common.LogQuota(e.Used), common.LogQuota(e.Estimated), common.LogQuota(e.Limit))
 	}
-	return fmt.Sprintf("今日 token 用量已达上限（已用 %d / 上限 %d），请明日再试或联系管理员调整",
-		e.Used, e.Limit)
+	return fmt.Sprintf("今日 token 用量已达上限（已用 %d + 本次预估 %d / 上限 %d），请明日再试或联系管理员调整",
+		e.Used, e.Estimated, e.Limit)
 }
 
 // AsDailyLimitError 判断 err 是否为单日上限错误，并取出详情。

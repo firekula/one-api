@@ -419,7 +419,9 @@
       "disable": "Disable",
       "edit": "Edit",
       "promote": "Promote",
-      "demote": "Demote"
+      "demote": "Demote",
+      "reset_daily_usage": "Reset Today's Usage",
+      "reset_daily_usage_confirm": "Reset today's usage for"
     }
   },
   "dashboard": {
