@@ -52,6 +52,36 @@ func TestModelRatioSpotChecks(t *testing.T) {
 	}
 }
 
+// Every name below is still offered by an adaptor's own model list, so it must keep a
+// real ratio: dropping one from the table would silently bill it at the 1x fallback.
+func TestAdaptorListedLegacyModelsKeepTheirRatio(t *testing.T) {
+	cases := []struct {
+		model string
+		want  float64
+		where string
+	}{
+		{"gpt-4-32k", 30, "relay/adaptor/openai/constants.go"},
+		{"gpt-4-32k-0314", 30, "relay/adaptor/openai/constants.go"},
+		{"gpt-4-32k-0613", 30, "relay/adaptor/openai/constants.go"},
+		{"gpt-4-vision-preview", 5, "relay/adaptor/openai/constants.go"},
+		{"gpt-3.5-turbo-instruct", 0.75, "relay/adaptor/openai/constants.go"},
+		{"text-ada-001", 0.2, "relay/adaptor/openai/constants.go"},
+		{"text-babbage-001", 0.25, "relay/adaptor/openai/constants.go"},
+		{"text-curie-001", 1, "relay/adaptor/openai/constants.go"},
+		{"ERNIE-Bot-8K", 0.024 * RMB, "relay/adaptor/baidu"},
+		{"glm-3-turbo", 0.001 * RMB, "relay/adaptor/zhipu/constants.go"},
+	}
+	for _, c := range cases {
+		if _, ok := DefaultModelRatio[c.model]; !ok {
+			t.Errorf("%q (%s) is missing from DefaultModelRatio: it would bill at the 1x fallback", c.model, c.where)
+			continue
+		}
+		if got := GetModelRatio(c.model, 1); got != c.want {
+			t.Errorf("GetModelRatio(%q, 1) = %v, want %v", c.model, got, c.want)
+		}
+	}
+}
+
 func TestCompletionRatioSpotChecks(t *testing.T) {
 	cases := []struct {
 		model string

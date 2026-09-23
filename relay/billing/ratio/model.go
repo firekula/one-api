@@ -26,8 +26,14 @@ var modelRatioLock sync.RWMutex
 // 1 === ￥0.014 / 1k tokens
 var ModelRatio = map[string]float64{
 	// https://openai.com/pricing
-	"gpt-4":                                   15,
-	"gpt-4-0613":                              15,
+	"gpt-4":      15,
+	"gpt-4-0613": 15,
+	// Legacy names the OpenAI adaptor still lists; kept so they cannot silently fall
+	// through to the 1x unknown-model rate.
+	"gpt-4-32k":                               30,
+	"gpt-4-32k-0314":                          30,
+	"gpt-4-32k-0613":                          30,
+	"gpt-4-vision-preview":                    5,
 	"gpt-4-1106-preview":                      5,    // $0.01 / 1K tokens
 	"gpt-4-0125-preview":                      5,    // $0.01 / 1K tokens
 	"gpt-4-turbo-preview":                     5,    // $0.01 / 1K tokens
@@ -99,6 +105,7 @@ var ModelRatio = map[string]float64{
 	"gpt-3.5-turbo-16k-0613":                  1.5,
 	"gpt-3.5-turbo-1106":                      0.5,  // $0.001 / 1K tokens
 	"gpt-3.5-turbo-0125":                      0.25, // $0.0005 / 1K tokens
+	"gpt-3.5-turbo-instruct":                  0.75, // $0.0015 / 1K tokens
 	"whisper-1":                               15,   // $0.006 / minute -> $0.006 / 150 words -> $0.006 / 200 tokens -> $0.03 / 1k tokens
 	"tts-1":                                   7.5,  // 1k characters -> $0.015
 	"tts-1-1106":                              7.5,  // 1k characters -> $0.015
@@ -109,6 +116,16 @@ var ModelRatio = map[string]float64{
 	"text-embedding-ada-002":                  0.05,
 	"text-moderation-stable":                  0.1,
 	"text-moderation-latest":                  0.1,
+	// Vendor-retired completions/edits models that the OpenAI adaptor still lists; the
+	// upstream defaults carry them, so keep them here instead of billing them at 1x.
+	"text-ada-001":            0.2,
+	"text-babbage-001":        0.25,
+	"text-curie-001":          1,
+	"text-davinci-edit-001":   10,
+	"code-davinci-edit-001":   10,
+	"davinci":                 10,
+	"curie":                   10,
+	"text-search-ada-doc-001": 10,
 	// kept at the previous table's value (no entry in the current upstream defaults)
 	"dall-e-2": 0.02 * USD, // $0.016 - $0.020 / image
 	"dall-e-3": 0.04 * USD, // $0.040 - $0.120 / image
@@ -173,6 +190,7 @@ var ModelRatio = map[string]float64{
 
 	// https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7
 	"ERNIE-4.0-8K":       0.120 * RMB,
+	"ERNIE-Bot-8K":       0.024 * RMB, // routed by the Baidu adaptor itself
 	"ERNIE-3.5-8K":       0.012 * RMB,
 	"ERNIE-3.5-8K-0205":  0.024 * RMB,
 	"ERNIE-3.5-8K-1222":  0.012 * RMB,
@@ -199,6 +217,7 @@ var ModelRatio = map[string]float64{
 	"glm-4-flash": 0,
 	"glm-4v-plus": 0.01 * RMB,
 	// kept at the previous table's value (no entry in the current upstream defaults)
+	"glm-3-turbo":     0.001 * RMB, // deprecated; upstream defaults still carry the stale ￥0.005 / 1K tokens
 	"glm-4-flashx":    0.0001 * RMB,
 	"glm-4v-flash":    0,
 	"cogview-3-plus":  0.06 * RMB,
